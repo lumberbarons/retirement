@@ -1,0 +1,85 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build outputs
+dist/
+build/
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go
+*.test
+*.out
+go.work
+go.work.sum
+api/server
+
+# TypeScript
+*.js.map
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test coverage
+coverage/
+*.coverprofile
+coverage.out
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# AWS
+.aws-sam/
+samconfig.toml
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Playwright
+playwright-report/
+test-results/
+
+# Claude Code
+settings.local.json
+.claude/worktrees/
+
+# Playwright
+.playwright-mcp
+
+# Generated API documentation
+docs/api/
+
+# Python bytecode
+__pycache__/
+*.pyc
+.opencode/worktrees/
