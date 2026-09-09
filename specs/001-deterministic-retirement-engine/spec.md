@@ -2,7 +2,7 @@
 
 **Slug**: `001-deterministic-retirement-engine`
 **Created**: 2026-09-09
-**Status**: Draft
+**Status**: Accepted
 
 ## Description
 
