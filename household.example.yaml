@@ -65,6 +65,19 @@ spending:
   target_today_dollars: 80000
   mode: smile
   survivor_factor: 0.70
+  lumpy:
+    - name: Travel budget
+      amount_today_dollars: 12000
+      start_year: 2041
+      end_year: 2052
+    - name: Roof replacement
+      amount_today_dollars: 25000
+      start_year: 2047
+    - name: Vehicle replacement
+      amount_today_dollars: 45000
+      start_year: 2045
+      end_year: 2061
+      every_years: 8
 
 assumptions:
   portfolio_return: 0.055

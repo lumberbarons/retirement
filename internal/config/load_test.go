@@ -134,6 +134,14 @@ func TestLoad_ExampleCoversSchema(t *testing.T) {
 	if h.Spending.Mode != "flat" && h.Spending.Mode != "smile" {
 		t.Fatalf("spending mode = %q, want flat or smile", h.Spending.Mode)
 	}
+	if len(h.Spending.Lumpy) == 0 {
+		t.Fatal("example household has no lumpy spending streams")
+	}
+	for _, item := range h.Spending.Lumpy {
+		if item.AmountTodayDollars <= 0 || item.StartYear < h.BaseYear {
+			t.Fatalf("lumpy item %q = %+v, want a positive amount in a future year", item.Name, item)
+		}
+	}
 	if h.Assumptions.PortfolioReturn <= 0 {
 		t.Fatalf("portfolio return = %v, want > 0", h.Assumptions.PortfolioReturn)
 	}
@@ -280,6 +288,30 @@ func TestLoad_InvalidConfigNamesFirstOffendingField(t *testing.T) {
 			"spending:\n  target_today_dollars: 60000\n",
 			"spending:\n  target_today_dollars: 60000\n  survivor_factor: 1.5\n",
 			"spending.survivor_factor",
+		},
+		{
+			"lumpy amount non-positive",
+			"spending:\n  target_today_dollars: 60000\n",
+			"spending:\n  target_today_dollars: 60000\n  lumpy:\n    - amount_today_dollars: 0\n      start_year: 2030\n",
+			"spending.lumpy[0].amount_today_dollars",
+		},
+		{
+			"lumpy start year before base year",
+			"spending:\n  target_today_dollars: 60000\n",
+			"spending:\n  target_today_dollars: 60000\n  lumpy:\n    - amount_today_dollars: 1000\n      start_year: 2020\n",
+			"spending.lumpy[0].start_year",
+		},
+		{
+			"lumpy end year before start year",
+			"spending:\n  target_today_dollars: 60000\n",
+			"spending:\n  target_today_dollars: 60000\n  lumpy:\n    - amount_today_dollars: 1000\n      start_year: 2030\n      end_year: 2029\n",
+			"spending.lumpy[0].end_year",
+		},
+		{
+			"lumpy negative every-years",
+			"spending:\n  target_today_dollars: 60000\n",
+			"spending:\n  target_today_dollars: 60000\n  lumpy:\n    - amount_today_dollars: 1000\n      start_year: 2030\n      every_years: -2\n",
+			"spending.lumpy[0].every_years",
 		},
 		{
 			"wage growth out of range",

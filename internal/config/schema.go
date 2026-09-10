@@ -65,10 +65,23 @@ type Account struct {
 }
 
 type Spending struct {
-	TargetTodayDollars float64 `yaml:"target_today_dollars"`
-	Mode               string  `yaml:"mode"`
-	Inflation          float64 `yaml:"inflation"`
-	SurvivorFactor     float64 `yaml:"survivor_factor"`
+	TargetTodayDollars float64     `yaml:"target_today_dollars"`
+	Mode               string      `yaml:"mode"`
+	Inflation          float64     `yaml:"inflation"`
+	SurvivorFactor     float64     `yaml:"survivor_factor"`
+	Lumpy              []LumpyItem `yaml:"lumpy"`
+}
+
+// LumpyItem is a dated spending stream kept out of the base rate, per the
+// governing spec §6.4: a one-off purchase (roof), a run of years (travel
+// budget), or a recurring purchase (vehicle replacement). Amounts are stated
+// in today's dollars, like the base target.
+type LumpyItem struct {
+	Name               string  `yaml:"name"`
+	AmountTodayDollars float64 `yaml:"amount_today_dollars"`
+	StartYear          int     `yaml:"start_year"`
+	EndYear            int     `yaml:"end_year"`
+	EveryYears         int     `yaml:"every_years"`
 }
 
 type Assumptions struct {
