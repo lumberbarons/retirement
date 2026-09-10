@@ -112,7 +112,7 @@ versions; the dated table gives the same selection with one lookup.
 ## Implementation Notes
 
 - Single package owns all constants; every row carries `yearEffective`,
-  `value`, `indexBasis` (CPI | wage | fixed | planSpecific | userSet),
+  `value`, `indexBasis` (CPI | averageWage | fixed | planSpecific | userSet),
   `source` (e.g. CRA, ESDC, FP Canada), and `lastVerified`.
 - Selection = exact row for the projection year if present, else forward-index
   from the newest row by the row's `indexBasis`; a `fixed`-basis row is

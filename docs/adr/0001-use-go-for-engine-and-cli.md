@@ -57,9 +57,11 @@ would be the fastest to prototype and has the strongest numeric ergonomics
 requiring a uv/Python runtime, and running hundreds of thousands of
 projections in pure Python becomes a real perf concern. TypeScript would
 unify language with the future React frontend, but JS has no native decimal
-type and numeric determinism is fiddly, which conflicts directly with a ±$1
-validation gate. Go's `go test` table-driven tests also make the validation
-gate near-zero-friction compared to wiring a test runner in the other two.
+type — like Go's own eventual float64 choice, it would still need a
+follow-on money-representation decision, without Go's static typing or
+table-driven test ergonomics to lean on while making it. Go's `go test`
+table-driven tests also make the validation gate near-zero-friction compared
+to wiring a test runner in the other two.
 
 ## Consequences
 
@@ -107,8 +109,10 @@ gate near-zero-friction compared to wiring a test runner in the other two.
 ### TypeScript (Node)
 
 - Good: shares a language with the future React frontend; large ecosystem.
-- Bad: no native decimal and float determinism pitfalls conflict with the ±$1
-  gate; CLI distribution requires a Node runtime or heavy packaging.
+- Bad: no native decimal type, so it inherits the same deferred
+  money-representation question as Go without Go's static typing or
+  table-driven tests to offset it; CLI distribution requires a Node runtime
+  or heavy packaging.
 
 ## Implementation Notes
 

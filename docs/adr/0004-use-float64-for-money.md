@@ -83,6 +83,13 @@ the validation gate does not ask for.
   is rounding to the cent at the account roll-forward and reported-output
   boundaries each year, plus a validation case around the full-horizon total,
   which bounds cumulative drift far below $1.
+- This closes the cross-platform risk ADR-0001 flagged and deferred to this
+  decision: float64 results are not guaranteed bit-identical across platforms,
+  and this ADR does not make them so. Instead, the ±$1 gate makes that
+  irrelevant — cross-platform drift stays far below a cent, well inside
+  tolerance, once the rounding boundaries above are respected. CI's
+  platform pin (added as a stopgap under ADR-0001) is no longer required for
+  validation-gate trustworthiness and may be dropped.
 
 ## Pros and Cons of the Options
 
@@ -98,7 +105,7 @@ the validation gate does not ask for.
 - Good: exact and deterministic; arguably the safest single-choice default.
 - Bad: gross-ups/DTCs/ramps need a fixed scale and a rounding policy; more
   verbose and error-prone for a percentage-heavy engine; integer overflow is
-  only averted by `int64` with a cents scale (~$9.2e12 range is ample, but a
+  only averted by `int64` with a cents scale (~$9.2e16 range is ample, but a
   scale still has to be maintained everywhere).
 
 ### Decimal library

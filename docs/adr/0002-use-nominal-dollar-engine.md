@@ -6,7 +6,7 @@ date: 2026-09-09
 deciders: [lumberbarons]
 supersedes: []
 superseded-by: []
-related: []
+related: [ADR-0003, ADR-0004]
 tags: [architecture, money, determinism, constants]
 ---
 
