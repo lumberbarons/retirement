@@ -241,3 +241,9 @@ func TestDefaultForward(t *testing.T) {
 		t.Fatalf("DefaultForward = %+v, want CPI 0.021 wage 0.031", f)
 	}
 }
+
+func TestDefaultForward_BeforeFirstRowErrors(t *testing.T) {
+	if _, err := DefaultForward(2025); err == nil {
+		t.Fatal("DefaultForward(2025) should error, got nil")
+	}
+}

@@ -187,6 +187,118 @@ func TestLoad_InvalidConfigNamesFirstOffendingField(t *testing.T) {
 			"spouses[0].pension.accrual_rate",
 		},
 		{"retirement after death", "birth_year: 1980\n    retirement_age: 60", "birth_year: 1980\n    retirement_age: 60\n    death_age: 55", "spouses[0].retirement_age"},
+		{"base year below 2026", "base_year: 2026", "base_year: 2025", "base_year"},
+		{"base year above 2100", "base_year: 2026", "base_year: 2150", "base_year"},
+		{"province other than ON", "province: ON\n", "province: AB\n", "province"},
+		{"birth year before 1900", "birth_year: 1980", "birth_year: 1850", "spouses[0].birth_year"},
+		{"birth year after base year", "birth_year: 1980", "birth_year: 2030", "spouses[0].birth_year"},
+		{"death age below 50", "birth_year: 1980\n    retirement_age: 60", "birth_year: 1980\n    retirement_age: 60\n    death_age: 40", "spouses[0].death_age"},
+		{"death age above 120", "birth_year: 1980\n    retirement_age: 60", "birth_year: 1980\n    retirement_age: 60\n    death_age: 121", "spouses[0].death_age"},
+		{"retirement age below 40", "retirement_age: 60", "retirement_age: 35", "spouses[0].retirement_age"},
+		{"retirement age above 85", "retirement_age: 60", "retirement_age: 90", "spouses[0].retirement_age"},
+		{"negative cpp monthly", "monthly_at_65: 1000", "monthly_at_65: -5", "spouses[0].cpp.monthly_at_65"},
+		{"cpp start age above 70", "monthly_at_65: 1000\n      start_age: 65", "monthly_at_65: 1000\n      start_age: 75", "spouses[0].cpp.start_age"},
+		{"oas start age below 65", "oas:\n      start_age: 65", "oas:\n      start_age: 60", "spouses[0].oas.start_age"},
+		{"empty account name", "  - name: A TFSA", "  - name: ''", "accounts[0].name"},
+		{"duplicate account name", "  - name: B RRSP", "  - name: A TFSA", "accounts[1].name"},
+		{"negative account balance", "balance: 50000", "balance: -50000", "accounts[0].balance"},
+		{"acb on a tfsa", "balance: 50000", "balance: 50000\n    acb: 100", "accounts[0].acb"},
+		{
+			"negative acb on non-registered",
+			"  - name: B RRSP\n    type: rrsp\n    owner: B\n    balance: 100000\n",
+			"  - name: B NR\n    type: non_registered\n    owner: B\n    balance: 100000\n    acb: -5\n",
+			"accounts[1].acb",
+		},
+		{
+			"spousal contributor is not a spouse",
+			"type: rrsp\n    owner: B",
+			"type: rrsp\n    owner: B\n    spousal:\n      contributor: C\n      contribution_years: [2024]",
+			"accounts[1].spousal.contributor",
+		},
+		{
+			"spousal contribution year out of range",
+			"type: rrsp\n    owner: B",
+			"type: rrsp\n    owner: B\n    spousal:\n      contributor: A\n      contribution_years: [1985]",
+			"accounts[1].spousal.contribution_years",
+		},
+		{
+			"pension years of service below 1",
+			"  - name: A\n    birth_year: 1980\n",
+			"  - name: A\n    birth_year: 1980\n    pension:\n      accrual_rate: 0.02\n      years_of_service: 0\n      final_average_earnings: 80000\n      start_age: 60\n",
+			"spouses[0].pension.years_of_service",
+		},
+		{
+			"pension final average earnings non-positive",
+			"  - name: A\n    birth_year: 1980\n",
+			"  - name: A\n    birth_year: 1980\n    pension:\n      accrual_rate: 0.02\n      years_of_service: 30\n      final_average_earnings: 0\n      start_age: 60\n",
+			"spouses[0].pension.final_average_earnings",
+		},
+		{
+			"pension start age below 45",
+			"  - name: A\n    birth_year: 1980\n",
+			"  - name: A\n    birth_year: 1980\n    pension:\n      accrual_rate: 0.02\n      years_of_service: 30\n      final_average_earnings: 80000\n      start_age: 44\n",
+			"spouses[0].pension.start_age",
+		},
+		{
+			"negative pension bridge",
+			"  - name: A\n    birth_year: 1980\n",
+			"  - name: A\n    birth_year: 1980\n    pension:\n      accrual_rate: 0.02\n      years_of_service: 30\n      final_average_earnings: 80000\n      start_age: 60\n      bridge_monthly: -5\n",
+			"spouses[0].pension.bridge_monthly",
+		},
+		{
+			"pension indexation not none/full_cpi/partial",
+			"  - name: A\n    birth_year: 1980\n",
+			"  - name: A\n    birth_year: 1980\n    pension:\n      accrual_rate: 0.02\n      years_of_service: 30\n      final_average_earnings: 80000\n      start_age: 60\n      indexation: bananas\n",
+			"spouses[0].pension.indexation",
+		},
+		{
+			"partial pension indexation without a rate",
+			"  - name: A\n    birth_year: 1980\n",
+			"  - name: A\n    birth_year: 1980\n    pension:\n      accrual_rate: 0.02\n      years_of_service: 30\n      final_average_earnings: 80000\n      start_age: 60\n      indexation: partial\n      indexation_rate: 0\n",
+			"spouses[0].pension.indexation_rate",
+		},
+		{
+			"pension survivor percent above 1",
+			"  - name: A\n    birth_year: 1980\n",
+			"  - name: A\n    birth_year: 1980\n    pension:\n      accrual_rate: 0.02\n      years_of_service: 30\n      final_average_earnings: 80000\n      start_age: 60\n      survivor_percent: 1.5\n",
+			"spouses[0].pension.survivor_percent",
+		},
+		{
+			"pension JS reduction above 1",
+			"  - name: A\n    birth_year: 1980\n",
+			"  - name: A\n    birth_year: 1980\n    pension:\n      accrual_rate: 0.02\n      years_of_service: 30\n      final_average_earnings: 80000\n      start_age: 60\n      js_reduction_factor: 1.5\n",
+			"spouses[0].pension.js_reduction_factor",
+		},
+		{
+			"spending inflation out of range",
+			"spending:\n  target_today_dollars: 60000\n",
+			"spending:\n  target_today_dollars: 60000\n  inflation: 0.5\n",
+			"spending.inflation",
+		},
+		{
+			"spending survivor factor above 1",
+			"spending:\n  target_today_dollars: 60000\n",
+			"spending:\n  target_today_dollars: 60000\n  survivor_factor: 1.5\n",
+			"spending.survivor_factor",
+		},
+		{
+			"wage growth out of range",
+			"spending:\n  target_today_dollars: 60000\n",
+			"spending:\n  target_today_dollars: 60000\nassumptions:\n  wage_growth: 0.5\n",
+			"assumptions.wage_growth",
+		},
+		{
+			"portfolio return below -0.5",
+			"spending:\n  target_today_dollars: 60000\n",
+			"spending:\n  target_today_dollars: 60000\nassumptions:\n  portfolio_return: -0.9\n",
+			"assumptions.portfolio_return",
+		},
+		{
+			"portfolio return at 0.5",
+			"spending:\n  target_today_dollars: 60000\n",
+			"spending:\n  target_today_dollars: 60000\nassumptions:\n  portfolio_return: 0.9\n",
+			"assumptions.portfolio_return",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -241,6 +353,67 @@ spending: {target_today_dollars: 50000}
 	wantReturn := (0.032 + 0.063 + 0.064 + 0.066) / 4
 	if h.Assumptions.PortfolioReturn != wantReturn {
 		t.Fatalf("portfolio return = %v, want equal-weight default %v", h.Assumptions.PortfolioReturn, wantReturn)
+	}
+}
+
+func TestLoad_AppliesPensionAndAccountDefaults(t *testing.T) {
+	h := mustLoad(t, writeConfig(t, `base_year: 2026
+spouses:
+  - name: A
+    birth_year: 1980
+    retirement_age: 60
+    pension:
+      accrual_rate: 0.02
+      years_of_service: 30
+      final_average_earnings: 80000
+      start_age: 60
+  - name: B
+    birth_year: 1982
+    retirement_age: 62
+spending:
+  target_today_dollars: 50000
+accounts:
+  - name: Joint NR
+    type: non_registered
+    owner: A
+    balance: 100000
+`))
+	p := h.Spouses[0].Pension
+	if p.Indexation != "none" {
+		t.Fatalf("pension indexation = %q, want default none", p.Indexation)
+	}
+	if p.SurvivorPercent != 0.60 {
+		t.Fatalf("pension survivor percent = %v, want default 0.60", p.SurvivorPercent)
+	}
+	if p.JSReductionFactor != 1 {
+		t.Fatalf("pension JS reduction = %v, want default 1", p.JSReductionFactor)
+	}
+	b, err := Load(writeConfig(t, `base_year: 2026
+province: ON
+spouses:
+  - name: A
+    birth_year: 1980
+    retirement_age: 60
+  - name: B
+    birth_year: 1982
+    retirement_age: 62
+accounts:
+  - name: Joint NR
+    type: non_registered
+    owner: A
+    balance: 100000
+spending:
+  target_today_dollars: 50000
+`))
+	if err != nil {
+		t.Fatalf("load non-registered default acb: %v", err)
+	}
+	a := b.Accounts[0]
+	if a.ACB != 100000 {
+		t.Fatalf("non-registered ACB = %v, want default to balance 100000", a.ACB)
+	}
+	if h.Spending.Inflation != 0.021 {
+		t.Fatalf("spending inflation = %v, want FP Canada default 0.021", h.Spending.Inflation)
 	}
 }
 
