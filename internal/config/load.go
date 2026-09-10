@@ -2,7 +2,9 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -44,6 +46,9 @@ func Parse(data []byte) (*Household, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 	if err := dec.Decode(h); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, errors.New("config is empty")
+		}
 		return nil, err
 	}
 	if h.BaseYear != 0 && (h.BaseYear < 2026 || h.BaseYear > 2100) {
@@ -100,7 +105,7 @@ func applyDefaults(h *Household) error {
 	if h.Spending.SurvivorFactor == 0 {
 		h.Spending.SurvivorFactor = defaultSurvivorFactor
 	}
-	fp, err := constants.FPCanada.For(h.BaseYear)
+	fp, _, err := constants.FPCanada.For(h.BaseYear)
 	if err != nil {
 		return err
 	}

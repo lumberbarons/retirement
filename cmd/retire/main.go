@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/lumberbarons/retirement/internal/config"
@@ -32,10 +33,11 @@ func run(args []string) error {
 	switch args[0] {
 	case "project":
 		fs := flag.NewFlagSet("project", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
 		configPath := fs.String("config", "household.yaml", "household config file (YAML)")
 		csvPath := fs.String("csv", "projection.csv", "write the year-by-year projection as CSV")
 		if err := fs.Parse(args[1:]); err != nil {
-			return err
+			return fmt.Errorf("%w\n%s", err, usage)
 		}
 		return project(*configPath, *csvPath)
 	default:

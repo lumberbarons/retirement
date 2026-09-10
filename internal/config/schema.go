@@ -34,10 +34,10 @@ type DBPension struct {
 	FinalAverageEarnings float64 `yaml:"final_average_earnings"`
 	StartAge             int     `yaml:"start_age"`
 	BridgeMonthly        float64 `yaml:"bridge_monthly"`
-	Indexation          string  `yaml:"indexation"`
-	IndexationRate      float64 `yaml:"indexation_rate"`
-	SurvivorPercent     float64 `yaml:"survivor_percent"`
-	JSReductionFactor   float64 `yaml:"js_reduction_factor"`
+	Indexation           string  `yaml:"indexation"`
+	IndexationRate       float64 `yaml:"indexation_rate"`
+	SurvivorPercent      float64 `yaml:"survivor_percent"`
+	JSReductionFactor    float64 `yaml:"js_reduction_factor"`
 }
 
 type AccountType string
@@ -55,13 +55,13 @@ type SpousalRRSP struct {
 }
 
 type Account struct {
-	Name                  string        `yaml:"name"`
-	Type                  AccountType   `yaml:"type"`
-	Owner                 string        `yaml:"owner"`
-	Balance               float64       `yaml:"balance"`
-	ACB                   float64       `yaml:"acb"`
-	Spousal               *SpousalRRSP  `yaml:"spousal"`
-	YoungerSpouseElection bool          `yaml:"younger_spouse_election"`
+	Name                  string       `yaml:"name"`
+	Type                  AccountType  `yaml:"type"`
+	Owner                 string       `yaml:"owner"`
+	Balance               float64      `yaml:"balance"`
+	ACB                   float64      `yaml:"acb"`
+	Spousal               *SpousalRRSP `yaml:"spousal"`
+	YoungerSpouseElection bool         `yaml:"younger_spouse_election"`
 }
 
 type Spending struct {

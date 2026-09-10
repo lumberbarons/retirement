@@ -249,3 +249,13 @@ func TestLoad_MissingFileFails(t *testing.T) {
 		t.Fatal("expected an error for a missing file, got nil")
 	}
 }
+
+func TestLoad_EmptyFileFails(t *testing.T) {
+	_, err := Load(writeConfig(t, ""))
+	if err == nil {
+		t.Fatal("expected an error for an empty file, got nil")
+	}
+	if !strings.Contains(err.Error(), "empty") {
+		t.Fatalf("error %q should say the config is empty", err.Error())
+	}
+}
