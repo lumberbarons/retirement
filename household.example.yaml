@@ -1,0 +1,70 @@
+base_year: 2026
+province: ON
+
+spouses:
+  - name: Alex
+    birth_year: 1981
+    death_age: 95
+    retirement_age: 60
+    cpp:
+      monthly_at_65: 1300.00
+      start_age: 65
+    oas:
+      start_age: 65
+    pension:
+      accrual_rate: 0.0200
+      years_of_service: 30
+      final_average_earnings: 85000
+      start_age: 60
+      bridge_monthly: 750.00
+      indexation: none
+      survivor_percent: 0.60
+      js_reduction_factor: 0.94
+  - name: Sam
+    birth_year: 1983
+    death_age: 95
+    retirement_age: 62
+    cpp:
+      monthly_at_65: 900.00
+      start_age: 65
+    oas:
+      start_age: 65
+
+accounts:
+  - name: Alex TFSA
+    type: tfsa
+    owner: Alex
+    balance: 92000
+  - name: Sam TFSA
+    type: tfsa
+    owner: Sam
+    balance: 61000
+  - name: Alex RRSP
+    type: rrsp
+    owner: Alex
+    balance: 450000
+  - name: Sam spousal RRSP
+    type: rrsp
+    owner: Sam
+    balance: 380000
+    spousal:
+      contributor: Alex
+      contribution_years: [2022, 2023, 2024]
+  - name: Alex RRIF
+    type: rrif
+    owner: Alex
+    balance: 50000
+    younger_spouse_election: true
+  - name: Joint taxable
+    type: non_registered
+    owner: Alex
+    balance: 200000
+    acb: 150000
+
+spending:
+  target_today_dollars: 80000
+  mode: smile
+  survivor_factor: 0.70
+
+assumptions:
+  portfolio_return: 0.055
