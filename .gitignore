@@ -17,6 +17,7 @@ bin/
 *.out
 go.work
 go.work.sum
+/retire
 api/server
 
 # TypeScript
