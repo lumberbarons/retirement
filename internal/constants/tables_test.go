@@ -37,10 +37,11 @@ func TestScalar_ExactYear(t *testing.T) {
 }
 
 func TestScalar_ForwardIndexCPI(t *testing.T) {
-	got := mustScalarFor(t, OASClawbackThreshold, 2028, testFwd)
-	want := 95323 * math.Pow(1.021, 2)
+	s := Scalar{Desc: "synthetic CPI scalar", Basis: BasisCPI, Rows: map[int]float64{2026: 100}}
+	got := mustScalarFor(t, s, 2028, testFwd)
+	want := 100 * math.Pow(1.021, 2)
 	if math.Abs(got-want) > testEps {
-		t.Fatalf("OASClawbackThreshold.For(2028) = %v, want %v", got, want)
+		t.Fatalf("CPI scalar For(2028) = %v, want %v", got, want)
 	}
 }
 
@@ -104,9 +105,12 @@ func TestRRIFMinimumFactor(t *testing.T) {
 }
 
 func TestTaxYear2026(t *testing.T) {
-	ty, err := Tax.For(2026)
+	ty, rowYear, err := Tax.For(2026)
 	if err != nil {
 		t.Fatalf("Tax.For(2026): %v", err)
+	}
+	if rowYear != 2026 {
+		t.Fatalf("Tax.For(2026) row year = %d, want 2026", rowYear)
 	}
 	if len(ty.FedBrackets) != 5 {
 		t.Fatalf("federal brackets: got %d, want 5", len(ty.FedBrackets))
@@ -146,8 +150,24 @@ func TestTaxYear2026(t *testing.T) {
 	}
 }
 
+func TestTable_ForReturnsNewestRowWithItsYear(t *testing.T) {
+	ty, rowYear, err := Tax.For(2030)
+	if err != nil {
+		t.Fatalf("Tax.For(2030): %v", err)
+	}
+	if rowYear != 2026 {
+		t.Fatalf("Tax.For(2030) row year = %d, want fallback to 2026", rowYear)
+	}
+	if ty.BPAFed != 16452 {
+		t.Fatalf("Tax.For(2030) BPAFed = %v, want unindexed 2026 value 16452", ty.BPAFed)
+	}
+	if _, _, err := Tax.For(2025); err == nil {
+		t.Fatal("Tax.For(2025) should error, got nil")
+	}
+}
+
 func TestOAS2026(t *testing.T) {
-	o, err := OAS.For(2026)
+	o, _, err := OAS.For(2026)
 	if err != nil {
 		t.Fatalf("OAS.For(2026): %v", err)
 	}
@@ -167,7 +187,7 @@ func TestOAS2026(t *testing.T) {
 }
 
 func TestCPP2026(t *testing.T) {
-	c, err := CPP.For(2026)
+	c, _, err := CPP.For(2026)
 	if err != nil {
 		t.Fatalf("CPP.For(2026): %v", err)
 	}
@@ -186,7 +206,7 @@ func TestCPP2026(t *testing.T) {
 }
 
 func TestFPCanada2026(t *testing.T) {
-	f, err := FPCanada.For(2026)
+	f, _, err := FPCanada.For(2026)
 	if err != nil {
 		t.Fatalf("FPCanada.For(2026): %v", err)
 	}

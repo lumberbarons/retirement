@@ -120,11 +120,11 @@ type OHPBand struct {
 }
 
 type TaxYear struct {
-	FedBrackets           []Bracket
-	ONBrackets            []Bracket
-	ONSurtaxT1            float64
-	ONSurtaxT2            float64
-	ONHealthPremium       []OHPBand
+	FedBrackets            []Bracket
+	ONBrackets             []Bracket
+	ONSurtaxT1             float64
+	ONSurtaxT2             float64
+	ONHealthPremium        []OHPBand
 	BPAFed                 float64
 	BPAFedPhaseOutFrom     float64
 	BPAFedPhaseOutTo       float64
@@ -322,14 +322,6 @@ var OASRecoveryRate = Scalar{
 	Rows:         map[int]float64{2026: 0.15},
 }
 
-var OASClawbackThreshold = Scalar{
-	Desc:         "OAS recovery-tax net income threshold",
-	Basis:        BasisCPI,
-	Source:       "canada.ca recovery-tax page, 2026",
-	LastVerified: "2026-09",
-	Rows:         map[int]float64{2026: 95323},
-}
-
 var OASDeferralMonthly = Scalar{
 	Desc:         "OAS deferral increase per month past 65",
 	Basis:        BasisFixed,
@@ -340,8 +332,8 @@ var OASDeferralMonthly = Scalar{
 
 type GISYear struct {
 	SingleMaxMonthly         float64
-	SingleCutoff              float64
-	SpouseOfPensionerMonthly  float64
+	SingleCutoff             float64
+	SpouseOfPensionerMonthly float64
 }
 
 var GIS = Table[GISYear]{
@@ -350,8 +342,8 @@ var GIS = Table[GISYear]{
 	Source:       "ESDC 2026 rate card Jan-Mar",
 	LastVerified: "2026-09",
 	Rows: map[int]GISYear{2026: {
-		SingleMaxMonthly:        1108.74,
-		SingleCutoff:            22488,
+		SingleMaxMonthly:         1108.74,
+		SingleCutoff:             22488,
 		SpouseOfPensionerMonthly: 667.41,
 	}},
 }
@@ -365,15 +357,15 @@ var PrescribedRate = Scalar{
 }
 
 type FPCanadaYear struct {
-	Inflation             float64
-	SalaryGrowth          float64
-	ShortTerm             float64
-	FixedIncome           float64
-	CanadianEquity        float64
-	USEquity              float64
-	IntlDevelopedEquity   float64
-	EmergingEquity        float64
-	BorrowingRate         float64
+	Inflation           float64
+	SalaryGrowth        float64
+	ShortTerm           float64
+	FixedIncome         float64
+	CanadianEquity      float64
+	USEquity            float64
+	IntlDevelopedEquity float64
+	EmergingEquity      float64
+	BorrowingRate       float64
 }
 
 var FPCanada = Table[FPCanadaYear]{
@@ -420,17 +412,23 @@ func ForwardIndex(v float64, b Basis, from, to int, f Forward) float64 {
 	}
 }
 
-func (t Table[T]) For(year int) (T, error) {
+// For returns the newest row at or before year, along with that row's year.
+// Composite rows mix index bases (e.g. Tax has CPI federal brackets beside
+// frozen Ontario thresholds), so the row is returned unindexed: callers must
+// forward-index each field from the returned year to the requested year
+// according to that field's basis (see ForwardIndex). Rows whose basis is
+// fixed or user-set are valid unchanged for any later year.
+func (t Table[T]) For(year int) (T, int, error) {
 	var zero T
 	y, ok := latestKey(t.Rows, year)
 	if !ok {
-		return zero, errors.New(t.Desc + ": no value at or before " + strconv.Itoa(year))
+		return zero, 0, errors.New(t.Desc + ": no value at or before " + strconv.Itoa(year))
 	}
-	return t.Rows[y], nil
+	return t.Rows[y], y, nil
 }
 
 func DefaultForward(year int) (Forward, error) {
-	f, err := FPCanada.For(year)
+	f, _, err := FPCanada.For(year)
 	if err != nil {
 		return Forward{}, err
 	}
