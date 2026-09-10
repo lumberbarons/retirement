@@ -9,23 +9,23 @@ out-of-scope notes or as sources the engine relies on.
 | ACB | Adjusted Cost Base — the tax cost of a holding in a non-registered account; capital gains are proceeds minus ACB. |
 | AFNI | Adjusted Family Net Income — the income measure used to phase out some Ontario credits and benefits. |
 | ALDA | Advanced Life Deferred Annuity — an annuity purchased now that begins paying at a later age; a longevity tool for a zero-bequest plan. |
-| BPA | Basic Personal Amount — the non-refundable federal credit that everyone claims; phases out at high income. |
+| BPA | Basic Personal Amount — the non-refundable credit (federal and Ontario) that everyone claims; the federal amount phases out at high income. |
 | CANSIM | Canadian Socio-economic Information Management System — Statistics Canada's data series, used for the LIF maximum factor. |
-| CPP | Canada Pension Plan — the earnings-related public pension. |
-| CPP2 | The second, enhanced CPP contribution tier on earnings between YMPE and YAMPE. |
 | CPI | Consumer Price Index — the inflation measure that indexes tax brackets, credits, the TFSA limit, OAS, and CPP-in-pay. |
 | CPM2014 | Canadian Pensioners' Mortality (2014) — the mortality table behind the probabilistic longevity model. |
+| CPP | Canada Pension Plan — the earnings-related public pension. |
+| CPP2 | The second, enhanced CPP contribution tier on earnings between YMPE and YAMPE. |
 | CRA | Canada Revenue Agency — the primary source for brackets, credits, and forms. |
 | DB | Defined Benefit — a pension whose payout is set by formula rather than by investment returns. |
 | DTC | Dividend Tax Credit — the credit (federal and Ontario) on grossed-up dividend income. |
 | ESDC | Employment and Social Development Canada — the primary source for CPP/OAS/GIS rate cards. |
 | FHSA | First Home Savings Account — an account type noted as out of scope for this household. |
 | FMV | Fair Market Value — the value used for deemed disposition of non-registered assets at death. |
-| FP Canada | The national financial-planning body that publishes the Projection Assumption Guidelines used as default returns. |
+| FP Canada | The national financial-planning body that, jointly with the Institute of Financial Planning, publishes the Projection Assumption Guidelines used as default returns. |
 | FSRA | Financial Services Regulatory Authority of Ontario — publishes the LIF F-factor and governs unlocking. |
 | FTC | Foreign Tax Credit — the credit claimed against Canadian tax on foreign-sourced income. |
 | GIS | Guaranteed Income Supplement — the income-tested top-up to OAS for low-income seniors. |
-| GST/HST | Goods and Services Tax / Harmonized Sales Tax — the consumption-tax credit that can reappear for a low-income survivor. |
+| GST/HST | Goods and Services Tax / Harmonized Sales Tax — the consumption taxes; the related credit (renamed the Canada Groceries and Essentials Benefit, CGEB, in July 2026) can reappear for a low-income survivor. |
 | ISP1002 | Service Canada form used to elect CPP retirement pension sharing between spouses. |
 | ITR | Income Tax Regulations — the regulations whose 7308 schedule sets the RRIF minimum factors. |
 | LIF | Life Income Fund — the locked-in successor to a LIRA, with both a minimum and a maximum withdrawal. |
@@ -35,6 +35,7 @@ out-of-scope notes or as sources the engine relies on.
 | OAS | Old Age Security — the residence-based public pension, subject to a 15% recovery tax. |
 | OEPTC | Ontario Energy and Property Tax Credit — a component of the Ontario Trillium Benefit. |
 | OHP | Ontario Health Premium — the Ontario surcharge on taxable income, added on top of income tax. |
+| ON-BEN | CRA form used to claim the Ontario Trillium Benefit and the OSHPTG, filed with the T1 return. |
 | OSHPTG | Ontario Senior Homeowners' Property Tax Grant — an income-tested credit for seniors aged 64+. |
 | OSTC | Ontario Sales Tax Credit — a component of the Ontario Trillium Benefit. |
 | OTB | Ontario Trillium Benefit — the combined OEPTC + OSTC + NOEC payment. |
