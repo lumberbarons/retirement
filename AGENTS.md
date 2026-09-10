@@ -7,6 +7,8 @@
 | `ontario-retirement-simulator-spec.md` | The governing implementation spec: the annual order of operations, every 2026 constant and its index basis, and the §7 validation cases (must pass within ±$1). Source of truth for tax/benefit arithmetic. |
 | `specs/001-deterministic-retirement-engine/spec.md` | The accepted epic for the deterministic engine — scope, user stories, task list, and done-when criteria. |
 
+Glossary of acronyms: `docs/glossary.md`.
+
 ## Architectural Decisions
 
 ADRs live in `docs/adr/`. Read the relevant ADRs before proposing architectural changes — they encode constraints and rejected alternatives. When writing or modifying a spec, cite the ADRs that constrained it in the spec's own frontmatter; ADRs do not track their downstream consumers.
