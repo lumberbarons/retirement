@@ -6,6 +6,9 @@ import (
 	"github.com/lumberbarons/retirement/internal/config"
 )
 
+// midYearFraction pro-rates spending in the first retirement year. The engine
+// models whole years, so retirement is approximated as starting mid-year
+// regardless of the actual month.
 const midYearFraction = 0.5
 
 func RoundCents(v float64) float64 {
@@ -81,6 +84,17 @@ func NewState(h *config.Household, startYear int) *State {
 func (s *State) person(name string) *Person {
 	for i := range s.People {
 		if s.People[i].Name == name {
+			return &s.People[i]
+		}
+	}
+	return nil
+}
+
+// spouse returns the other member of the couple (validation guarantees
+// exactly two spouses).
+func (s *State) spouse(name string) *Person {
+	for i := range s.People {
+		if s.People[i].Name != name {
 			return &s.People[i]
 		}
 	}

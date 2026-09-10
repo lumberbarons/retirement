@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lumberbarons/retirement/internal/config"
+	"github.com/lumberbarons/retirement/internal/constants"
 )
 
 const baseHousehold = `base_year: 2026
@@ -156,6 +157,38 @@ assumptions: {portfolio_return: 0.05, inflation: 0.021}
 	rrif2054 := accountYear(t, year2054, "Pat RRIF")
 	if year2054.MandatoryIncome != RoundCents(rrif2054.Begin*0.0528) {
 		t.Fatalf("2054 RRIF minimum = %v, want %v (age at Jan 1 is 71: 5.28%% of Jan-1 balance)", year2054.MandatoryIncome, RoundCents(rrif2054.Begin*0.0528))
+	}
+}
+
+func TestRun_RRIFMinimumUsesYoungerSpouseAgeWhenElected(t *testing.T) {
+	yamlText := `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1981, retirement_age: 60, death_age: 99}
+  - {name: Sam, birth_year: 1983, retirement_age: 62, death_age: 90}
+accounts:
+  - {name: Alex RRIF, type: rrif, owner: Alex, balance: 50000, younger_spouse_election: true}
+  - {name: Sam non-registered, type: non_registered, owner: Sam, balance: 1000000}
+spending: {target_today_dollars: 60000}
+assumptions: {portfolio_return: 0.05, inflation: 0.021}
+`
+	results := mustRun(t, yamlText, 2026)
+	first := results[0]
+	// Alex is 44 at Jan 1 2026 (factor 1/(90-44)); the election drops the
+	// factor to Sam's age 42: 1/(90-42).
+	want := RoundCents(50000 * (1.0 / 48.0))
+	if first.MandatoryIncome != want {
+		t.Fatalf("2026 mandatory = %v, want %v (elected to Sam's age 42, not Alex's 44)", first.MandatoryIncome, want)
+	}
+	// The election keeps using Sam's would-be age even after Sam dies:
+	// Sam dies in 2073, so 2074 minimums still use Sam's age at Jan 1 (90).
+	year2074 := results[2074-2026]
+	rrif := accountYear(t, year2074, "Alex RRIF")
+	if rrif.Begin <= 0 {
+		t.Fatalf("2074 RRIF begin = %v, want a positive balance to observe the minimum", rrif.Begin)
+	}
+	want2074 := RoundCents(rrif.Begin * constants.RRIFMinimumFactor(2074-1983-1))
+	if year2074.MandatoryIncome != want2074 {
+		t.Fatalf("2074 mandatory = %v, want %v (Sam's would-be age 90)", year2074.MandatoryIncome, want2074)
 	}
 }
 

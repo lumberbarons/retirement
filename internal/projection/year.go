@@ -77,7 +77,15 @@ func (s *State) stepMandatoryIncome(res *YearResult) {
 		if owner == nil || !owner.Alive {
 			continue
 		}
-		factor := constants.RRIFMinimumFactor(owner.AgeAtJan1(s.Year))
+		age := owner.AgeAtJan1(s.Year)
+		if a.YoungerSpouseElection {
+			// Irrevocable election at RRIF setup: minimums use the younger
+			// spouse's Jan-1 age, and keep using it after that spouse dies.
+			if spouse := s.spouse(a.Owner); spouse != nil {
+				age = spouse.AgeAtJan1(s.Year)
+			}
+		}
+		factor := constants.RRIFMinimumFactor(age)
 		minimum := math.Min(RoundCents(res.Accounts[i].Begin*factor), a.Balance)
 		minimum = RoundCents(minimum)
 		a.Balance -= minimum

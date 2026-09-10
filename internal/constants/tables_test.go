@@ -36,11 +36,15 @@ func TestScalar_ExactYear(t *testing.T) {
 	}
 }
 
-func TestScalar_ForwardIndexCPI(t *testing.T) {
-	got := mustScalarFor(t, OASClawbackThreshold, 2028, testFwd)
+func TestForwardIndex_CPI(t *testing.T) {
+	o, err := OAS.For(2026)
+	if err != nil {
+		t.Fatalf("OAS.For(2026): %v", err)
+	}
+	got := ForwardIndex(o.ClawbackThreshold, BasisCPI, 2026, 2028, testFwd)
 	want := 95323 * math.Pow(1.021, 2)
 	if math.Abs(got-want) > testEps {
-		t.Fatalf("OASClawbackThreshold.For(2028) = %v, want %v", got, want)
+		t.Fatalf("ForwardIndex(OAS clawback threshold, 2028) = %v, want %v", got, want)
 	}
 }
 

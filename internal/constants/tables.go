@@ -322,14 +322,6 @@ var OASRecoveryRate = Scalar{
 	Rows:         map[int]float64{2026: 0.15},
 }
 
-var OASClawbackThreshold = Scalar{
-	Desc:         "OAS recovery-tax net income threshold",
-	Basis:        BasisCPI,
-	Source:       "canada.ca recovery-tax page, 2026",
-	LastVerified: "2026-09",
-	Rows:         map[int]float64{2026: 95323},
-}
-
 var OASDeferralMonthly = Scalar{
 	Desc:         "OAS deferral increase per month past 65",
 	Basis:        BasisFixed,

@@ -6,13 +6,16 @@ import (
 	"os"
 
 	"github.com/lumberbarons/retirement/internal/config"
+	"github.com/lumberbarons/retirement/internal/projection"
+	"github.com/lumberbarons/retirement/internal/report"
 )
 
 const usage = `usage: retire <command> [flags]
 
 commands:
-  project    load and validate a household config
+  project    run a household projection from base year to second death
     --config <file>    household config file (YAML, default household.yaml)
+    --csv <file>       write the year-by-year projection as CSV (default projection.csv)
 `
 
 func main() {
@@ -30,31 +33,41 @@ func run(args []string) error {
 	case "project":
 		fs := flag.NewFlagSet("project", flag.ContinueOnError)
 		configPath := fs.String("config", "household.yaml", "household config file (YAML)")
+		csvPath := fs.String("csv", "projection.csv", "write the year-by-year projection as CSV")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		return project(*configPath)
+		return project(*configPath, *csvPath)
 	default:
 		return fmt.Errorf("unknown command %q\n%s", args[0], usage)
 	}
 }
 
-func project(configPath string) error {
+func project(configPath, csvPath string) error {
 	h, err := config.Load(configPath)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("household loaded from %s\n", configPath)
-	fmt.Printf("base year:   %d (%s)\n", h.BaseYear, h.Province)
-	for _, s := range h.Spouses {
-		fmt.Printf("spouse:      %s, born %d, retires at %d, dies at %d\n", s.Name, s.BirthYear, s.RetirementAge, s.DeathAge)
+	years, err := projection.Run(h, h.BaseYear)
+	if err != nil {
+		return err
 	}
-	fmt.Printf("accounts:    %d\n", len(h.Accounts))
-	for _, a := range h.Accounts {
-		fmt.Printf("  %-20s %-14s %-6s $%.2f\n", a.Name, a.Type, a.Owner, a.Balance)
+	r := report.New(h.BaseYear, h.Assumptions.Inflation, years)
+	if err := r.WriteTable(os.Stdout); err != nil {
+		return err
 	}
-	fmt.Printf("spending:    $%.2f today's dollars (%s)\n", h.Spending.TargetTodayDollars, h.Spending.Mode)
-	fmt.Printf("assumptions: return %.2f%%, inflation %.2f%%, wage growth %.2f%%\n",
-		h.Assumptions.PortfolioReturn*100, h.Assumptions.Inflation*100, h.Assumptions.WageGrowth*100)
+	fmt.Println()
+	if err := r.WriteSummary(os.Stdout); err != nil {
+		return err
+	}
+	f, err := os.Create(csvPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if err := r.WriteCSV(f); err != nil {
+		return err
+	}
+	fmt.Printf("CSV written to %s\n", csvPath)
 	return nil
 }
