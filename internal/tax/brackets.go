@@ -99,15 +99,21 @@ func indexYear(year int, f constants.Forward) (*indexedYear, error) {
 	}, nil
 }
 
-// IndexBrackets returns a year's brackets with both thresholds
-// forward-indexed by each bracket's own basis. Ontario mixes CPI-indexed
-// lower brackets with frozen upper ones, so a single year-wide basis would
-// be wrong.
+// IndexBrackets returns a year's brackets with each boundary forward-indexed
+// once and shared with the neighbouring bracket, so the schedule stays
+// contiguous. A bracket's basis governs the upper threshold it ends at; its
+// lower threshold is inherited from the bracket below. That keeps Ontario's
+// $107,785 boundary indexed with the 9.15% bracket while the frozen $150,000
+// and $220,000 boundaries above it stay put.
 func IndexBrackets(brackets []constants.Bracket, rowYear, year int, f constants.Forward) []constants.Bracket {
 	out := make([]constants.Bracket, len(brackets))
 	for i, b := range brackets {
+		lower := constants.ForwardIndex(b.Lower, b.Basis, rowYear, year, f)
+		if i > 0 {
+			lower = out[i-1].Upper
+		}
 		out[i] = constants.Bracket{
-			Lower: constants.ForwardIndex(b.Lower, b.Basis, rowYear, year, f),
+			Lower: lower,
 			Upper: constants.ForwardIndex(b.Upper, b.Basis, rowYear, year, f),
 			Rate:  b.Rate,
 			Basis: b.Basis,
@@ -142,8 +148,8 @@ func FederalBrackets(year int, f constants.Forward) ([]constants.Bracket, error)
 }
 
 // OntarioBrackets returns the Ontario bracket schedule for the year, indexed
-// from its dated-table row (the two lowest brackets index to CPI, the rest
-// are frozen).
+// from its dated-table row (the two lowest thresholds index to CPI; the
+// $150,000 and $220,000 thresholds are frozen).
 func OntarioBrackets(year int, f constants.Forward) ([]constants.Bracket, error) {
 	iy, err := indexYear(year, f)
 	if err != nil {

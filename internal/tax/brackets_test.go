@@ -54,12 +54,28 @@ func TestIndexBrackets_MixedBases(t *testing.T) {
 	}
 	almostEqual(t, brackets[0].Upper, 53891*1.02)
 	almostEqual(t, brackets[1].Upper, 107785*1.02)
-	if brackets[2].Lower != 107785 || brackets[2].Upper != 150000 {
-		t.Fatalf("frozen bracket = %v-%v, want 107785-150000 unchanged", brackets[2].Lower, brackets[2].Upper)
+	almostEqual(t, brackets[2].Lower, brackets[1].Upper)
+	almostEqual(t, brackets[2].Upper, 150000)
+	almostEqual(t, brackets[3].Upper, 220000)
+	for i := 1; i < len(brackets); i++ {
+		if brackets[i].Lower != brackets[i-1].Upper {
+			t.Fatalf("bracket %d lower = %v, want previous bracket's upper %v", i, brackets[i].Lower, brackets[i-1].Upper)
+		}
 	}
 	if brackets[4].Upper != math.Inf(1) {
 		t.Fatalf("top bracket upper = %v, want +Inf", brackets[4].Upper)
 	}
+}
+
+func TestBracketTax_OntarioIndexedBoundaryTaxedOnce(t *testing.T) {
+	brackets, err := OntarioBrackets(2027, constants.Forward{CPI: 0.02})
+	if err != nil {
+		t.Fatalf("OntarioBrackets: %v", err)
+	}
+	// $109,000 sits below the indexed top of the 9.15% bracket
+	// ($107,785 × 1.02 = $109,940.70), so no income may reach 11.16%.
+	want := 53891*1.02*0.0505 + (109000-53891*1.02)*0.0915
+	almostEqual(t, BracketTax(109000, brackets), want)
 }
 
 func TestFederalBrackets_IndexedForFutureYear(t *testing.T) {
