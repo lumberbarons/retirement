@@ -128,6 +128,9 @@ func TestLoad_ExampleCoversSchema(t *testing.T) {
 	if !pensionFound {
 		t.Fatal("example household has no DB pension")
 	}
+	if len(h.Spouses[0].PensionSplit) == 0 {
+		t.Fatal("example household has no T1032 pension split")
+	}
 	if h.Spending.TargetTodayDollars <= 0 {
 		t.Fatalf("spending target = %v, want > 0", h.Spending.TargetTodayDollars)
 	}
@@ -331,6 +334,24 @@ func TestLoad_InvalidConfigNamesFirstOffendingField(t *testing.T) {
 			"spending:\n  target_today_dollars: 60000\nassumptions:\n  portfolio_return: 0.9\n",
 			"assumptions.portfolio_return",
 		},
+		{
+			"pension split fraction above 50%",
+			"  - name: A\n    birth_year: 1980\n",
+			"  - name: A\n    birth_year: 1980\n    pension_split:\n      - year: 2040\n        fraction: 0.6\n",
+			"spouses[0].pension_split[0].fraction",
+		},
+		{
+			"pension split year before base year",
+			"  - name: A\n    birth_year: 1980\n",
+			"  - name: A\n    birth_year: 1980\n    pension_split:\n      - year: 2020\n        fraction: 0.3\n",
+			"spouses[0].pension_split[0].year",
+		},
+		{
+			"duplicate pension split year",
+			"  - name: A\n    birth_year: 1980\n",
+			"  - name: A\n    birth_year: 1980\n    pension_split:\n      - year: 2040\n        fraction: 0.3\n      - year: 2040\n        fraction: 0.4\n",
+			"spouses[0].pension_split[1].year",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -462,5 +483,22 @@ func TestLoad_EmptyFileFails(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "empty") {
 		t.Fatalf("error %q should say the config is empty", err.Error())
+	}
+}
+
+func TestLoad_ParsesPensionSplit(t *testing.T) {
+	text := strings.Replace(minimalValid,
+		"  - name: A\n    birth_year: 1980\n",
+		"  - name: A\n    birth_year: 1980\n    pension_split:\n      - year: 2040\n        fraction: 0.5\n",
+		1)
+	h := mustLoad(t, writeConfig(t, text))
+	if len(h.Spouses[0].PensionSplit) != 1 {
+		t.Fatalf("spouse A pension split = %+v, want one year", h.Spouses[0].PensionSplit)
+	}
+	if ps := h.Spouses[0].PensionSplit[0]; ps.Year != 2040 || ps.Fraction != 0.5 {
+		t.Fatalf("spouse A pension split = %+v, want 2040 at 0.5", ps)
+	}
+	if len(h.Spouses[1].PensionSplit) != 0 {
+		t.Fatalf("spouse B pension split = %+v, want none", h.Spouses[1].PensionSplit)
 	}
 }

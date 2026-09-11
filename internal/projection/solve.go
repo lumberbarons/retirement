@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/lumberbarons/retirement/internal/config"
+	"github.com/lumberbarons/retirement/internal/tax"
 )
 
 // solveTolerance is the width of the final bisection bracket: half a cent,
@@ -105,15 +106,25 @@ func inTier(t config.AccountType, tier []config.AccountType) bool {
 	return false
 }
 
-// applyWithdrawals records the allocation and removes it from balances,
-// clamping the sub-cent floating-point residue a proportional split can
-// leave behind.
-func (s *State) applyWithdrawals(alloc []float64, res *YearResult) {
+// applyWithdrawals records the allocation, adds each withdrawal's taxable
+// portion to the year's income, and removes it from balances. A
+// non-registered withdrawal reduces ACB proportionally; the sub-cent
+// floating-point residue a proportional split can leave behind is clamped.
+func (s *State) applyWithdrawals(alloc []float64, incomes []tax.Income, res *YearResult) {
 	for i, w := range alloc {
 		if w <= 0 {
 			continue
 		}
-		s.Accounts[i].Balance = math.Max(0, s.Accounts[i].Balance-w)
+		a := s.Accounts[i]
+		s.addWithdrawalIncome(incomes, i, w)
+		if a.Type == config.AccountNonRegistered && a.Balance > 0 {
+			ratio := a.ACB / a.Balance
+			if ratio > 1 {
+				ratio = 1
+			}
+			a.ACB = math.Max(0, a.ACB-w*ratio)
+		}
+		a.Balance = math.Max(0, a.Balance-w)
 		res.Accounts[i].Withdrawal += w
 		res.Withdrawals += w
 	}
