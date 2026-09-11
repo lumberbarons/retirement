@@ -96,25 +96,16 @@ func (s *State) stepMandatoryIncome(res *YearResult) {
 
 func (s *State) stepDiscretionaryWithdrawals(h *config.Household, res *YearResult) {
 	res.TargetNominal = s.nominalSpending(h)
-	need := res.TargetNominal - res.MandatoryIncome
-	if need > 0 {
-		for _, typ := range []config.AccountType{
-			config.AccountNonRegistered, config.AccountRRSP, config.AccountRRIF, config.AccountTFSA,
-		} {
-			for i, a := range s.Accounts {
-				if a.Type != typ || need <= 0 {
-					continue
-				}
-				w := math.Min(need, a.Balance)
-				if w <= 0 {
-					continue
-				}
-				a.Balance -= w
-				need -= w
-				res.Accounts[i].Withdrawal += w
-				res.Withdrawals += w
-			}
-		}
+	// The tax engine (US4) has not landed, so a discretionary withdrawal
+	// currently passes through untaxed and the gross-vs-net solve reduces to
+	// net = mandatory income + withdrawal. Plugging in the real tax function
+	// here is the seam that turns this back into a genuine gross-vs-net solve.
+	net := func(withdrawal float64) float64 {
+		return res.MandatoryIncome + withdrawal
+	}
+	withdrawal := RoundCents(SolveGross(res.TargetNominal, s.withdrawalCapacity(), net))
+	if withdrawal > 0 {
+		s.applyWithdrawals(s.allocate(withdrawal), res)
 	}
 	res.Withdrawals = RoundCents(res.Withdrawals)
 	res.GrossIncome = RoundCents(res.MandatoryIncome + res.Withdrawals)
@@ -142,17 +133,4 @@ func (s *State) stepDeathEvents(res *YearResult) {
 			res.Deaths = append(res.Deaths, p.Name)
 		}
 	}
-}
-
-func (s *State) nominalSpending(h *config.Household) float64 {
-	first := s.firstRetirementYear()
-	if s.Year < first {
-		return 0
-	}
-	nominal := RoundCents(h.Spending.TargetTodayDollars *
-		math.Pow(1+h.Spending.Inflation, float64(s.Year-h.BaseYear)))
-	if s.Year == first {
-		return RoundCents(nominal * midYearFraction)
-	}
-	return nominal
 }

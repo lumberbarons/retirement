@@ -296,6 +296,21 @@ func validatePlan(h *Household) error {
 	if h.Spending.SurvivorFactor <= 0 || h.Spending.SurvivorFactor > 1 {
 		return fieldError("spending.survivor_factor", "must be in (0, 1], got %v", h.Spending.SurvivorFactor)
 	}
+	for i, item := range h.Spending.Lumpy {
+		p := fmt.Sprintf("spending.lumpy[%d]", i)
+		if item.AmountTodayDollars <= 0 {
+			return fieldError(p+".amount_today_dollars", "must be positive, got %v", item.AmountTodayDollars)
+		}
+		if item.StartYear < h.BaseYear {
+			return fieldError(p+".start_year", "must not be before base year %d, got %d", h.BaseYear, item.StartYear)
+		}
+		if item.EndYear != 0 && item.EndYear < item.StartYear {
+			return fieldError(p+".end_year", "must not be before start year %d, got %d", item.StartYear, item.EndYear)
+		}
+		if item.EveryYears < 0 {
+			return fieldError(p+".every_years", "must not be negative, got %d", item.EveryYears)
+		}
+	}
 	if h.Assumptions.Inflation <= 0 || h.Assumptions.Inflation > 0.2 {
 		return fieldError("assumptions.inflation", "must be in (0, 0.2], got %v", h.Assumptions.Inflation)
 	}
