@@ -13,14 +13,6 @@ import (
 	"github.com/lumberbarons/retirement/internal/constants"
 )
 
-// survivorUnder65Share is the portion of the deceased spouse's retirement
-// pension paid to a survivor under 65, on top of the flat amount.
-const survivorUnder65Share = 0.375
-
-// survivor65PlusShare is the portion of the deceased spouse's retirement
-// pension paid to a survivor 65 or older, with no flat component.
-const survivor65PlusShare = 0.60
-
 // CPPFactor returns the actuarial adjustment applied to the age-65 CPP
 // retirement pension for a start age from 60 to 70: 0.640 at 60, 1.000 at 65,
 // and 1.420 at 70. The monthly adjustment rates are fixed in law and come
@@ -75,17 +67,25 @@ func CPPSurvivorAnnual(deceasedMonthlyAt65, survivorMonthlyAt65 float64, survivo
 	table := func(v float64) float64 {
 		return constants.ForwardIndex(v, constants.BasisCPI, rowYear, year, f)
 	}
+	under65Share, err := constants.CPPSurvivorUnder65Share.For(year, f)
+	if err != nil {
+		return 0, err
+	}
+	plus65Share, err := constants.CPPSurvivor65PlusShare.For(year, f)
+	if err != nil {
+		return 0, err
+	}
 	own := indexCPI(survivorMonthlyAt65, baseYear, year, f)
 	deceased := indexCPI(deceasedMonthlyAt65, baseYear, year, f)
 
 	computed := 0.0
 	if year-survivorBirthYear >= 65 {
-		computed = math.Min(survivor65PlusShare*deceased, table(row.Survivor65Plus))
+		computed = math.Min(plus65Share*deceased, table(row.Survivor65Plus))
 	} else {
 		// The flat component reconciles the published under-65 maximum with
 		// its flat-plus-share structure: max = flat + share x max pension.
-		flat := table(row.SurvivorUnder65) - survivorUnder65Share*table(row.MaxMonthlyAt65)
-		computed = math.Min(flat+survivorUnder65Share*deceased, table(row.SurvivorUnder65))
+		flat := table(row.SurvivorUnder65) - under65Share*table(row.MaxMonthlyAt65)
+		computed = math.Min(flat+under65Share*deceased, table(row.SurvivorUnder65))
 	}
 
 	topUp := math.Max(0, math.Min(table(row.SurvivorCap), own+computed)-own)

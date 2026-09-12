@@ -6,9 +6,6 @@ import (
 	"github.com/lumberbarons/retirement/internal/constants"
 )
 
-// gisReductionRate is the rate at which GIS is reduced by other income.
-const gisReductionRate = 0.50
-
 // GISInput is one spouse-year's Guaranteed Income Supplement test.
 type GISInput struct {
 	Year    int
@@ -43,6 +40,10 @@ func GISAnnual(in GISInput) (float64, error) {
 			return 0, nil
 		}
 	}
-	reduction := gisReductionRate * math.Max(0, in.OtherIncome)
+	rate, err := constants.GISReductionRate.For(in.Year, in.Forward)
+	if err != nil {
+		return 0, err
+	}
+	reduction := rate * math.Max(0, in.OtherIncome)
 	return math.Max(0, 12*at(monthly)-reduction), nil
 }
