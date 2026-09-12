@@ -185,6 +185,27 @@ func validateSpouses(h *Household) error {
 		if err := validatePension(p, s.Pension, h.BaseYear); err != nil {
 			return err
 		}
+		if err := validatePensionSplit(p, s.PensionSplit, h.BaseYear); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validatePensionSplit(spousePath string, splits []PensionSplitYear, baseYear int) error {
+	seen := map[int]bool{}
+	for i, ps := range splits {
+		p := fmt.Sprintf("%s.pension_split[%d]", spousePath, i)
+		if ps.Year < baseYear || ps.Year > 2100 {
+			return fieldError(p+".year", "must be between %d and 2100, got %d", baseYear, ps.Year)
+		}
+		if ps.Fraction < 0 || ps.Fraction > 0.5 {
+			return fieldError(p+".fraction", "must be in [0, 0.5], got %v", ps.Fraction)
+		}
+		if seen[ps.Year] {
+			return fieldError(p+".year", "duplicate pension split year %d", ps.Year)
+		}
+		seen[ps.Year] = true
 	}
 	return nil
 }

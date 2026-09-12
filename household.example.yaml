@@ -20,6 +20,9 @@ spouses:
       indexation: none
       survivor_percent: 0.60
       js_reduction_factor: 0.94
+    pension_split:
+      - year: 2042
+        fraction: 0.30
   - name: Sam
     birth_year: 1983
     death_age: 95
