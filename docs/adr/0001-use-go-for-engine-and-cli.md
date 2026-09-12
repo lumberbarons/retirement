@@ -1,7 +1,7 @@
 ---
 id: ADR-0001
 title: Use Go for the engine and CLI
-status: proposed
+status: accepted
 date: 2026-09-09
 deciders: [lumberbarons]
 supersedes: []

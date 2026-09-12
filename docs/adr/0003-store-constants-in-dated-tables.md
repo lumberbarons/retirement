@@ -1,7 +1,7 @@
 ---
 id: ADR-0003
 title: Store year-specific constants in dated tables
-status: proposed
+status: accepted
 date: 2026-09-09
 deciders: [lumberbarons]
 supersedes: []

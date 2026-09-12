@@ -1,7 +1,7 @@
 ---
 id: ADR-0002
 title: Compute in nominal dollars and deflate at the reporting layer
-status: proposed
+status: accepted
 date: 2026-09-09
 deciders: [lumberbarons]
 supersedes: []
