@@ -61,6 +61,20 @@ func TestIncome_CapitalGainsIncludeAtFiftyPercent(t *testing.T) {
 	}
 }
 
+// TestIncome_EnhancedCPPContributionDeductsFromTaxableIncome covers the split
+// treatment of employee CPP contributions: the portion above the creditable
+// base rate is deducted from income, while the base portion stays in the
+// credit base for the caller to claim.
+func TestIncome_EnhancedCPPContributionDeductsFromTaxableIncome(t *testing.T) {
+	in := Income{Employment: 50000, CPPContributions: 2766.75, CPPBaseContributions: 2301.75}
+	rates, _, err := constantsIncome(t)
+	if err != nil {
+		t.Fatalf("constants.Income.For: %v", err)
+	}
+	taxable, _, _ := in.grossedUp(rates)
+	almostEqual(t, taxable, 50000-465)
+}
+
 func TestIncome_AllComponentsTaxable(t *testing.T) {
 	in := Income{
 		Employment:           10000,

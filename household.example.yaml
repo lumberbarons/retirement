@@ -10,6 +10,10 @@ spouses:
     birth_year: 1981
     death_age: 95
     retirement_age: 60
+    employment_income: 95000
+    # After-tax surplus is retained here; it is declared explicitly because
+    # the account is held jointly but modelled under Alex's name.
+    savings_account: Joint taxable
     cpp:
       monthly_at_65: 1300.00
       start_age: 65
@@ -31,6 +35,8 @@ spouses:
     birth_year: 1983
     death_age: 95
     retirement_age: 62
+    employment_income: 70000
+    savings_account: Joint taxable
     cpp:
       monthly_at_65: 900.00
       start_age: 65

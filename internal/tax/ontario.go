@@ -133,7 +133,8 @@ func computeSpouse(name string, age int, in Income, spouseNetIncome float64, iy 
 	fedTransferable := fedAge + fedPension
 	fedCreditBase := iy.federalBPA(taxable) + fedTransferable +
 		spousalAmount(spouseNetIncome, iy.spousalFed, 0) +
-		math.Min(in.Employment, iy.employment)
+		math.Min(in.Employment, iy.employment) +
+		in.CPPBaseContributions
 	fedCredits := fedCreditBase * iy.fedBrackets[0].Rate
 	fedAvailable := math.Max(0, r.FederalTaxBeforeCredits-fedDTC)
 	r.FederalCredits = math.Min(fedCredits, fedAvailable)
@@ -144,7 +145,8 @@ func computeSpouse(name string, age int, in Income, spouseNetIncome float64, iy 
 	onPension := math.Min(iy.pensionON, in.EligiblePension(age))
 	onTransferable := onAge + onPension
 	onCreditBase := iy.bpaON + onTransferable +
-		spousalAmount(spouseNetIncome, iy.spousalON, iy.spousalIgnON)
+		spousalAmount(spouseNetIncome, iy.spousalON, iy.spousalIgnON) +
+		in.CPPBaseContributions
 	onCredits := onCreditBase * iy.onBrackets[0].Rate
 	onAvailable := math.Max(0, r.OntarioBasicTax-onDTC)
 	r.OntarioCredits = math.Min(onCredits, onAvailable)

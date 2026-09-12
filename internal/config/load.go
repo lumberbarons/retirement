@@ -140,7 +140,43 @@ func Validate(h *Household) error {
 	if err := validateAccounts(h); err != nil {
 		return err
 	}
-	return validatePlan(h)
+	if err := validatePlan(h); err != nil {
+		return err
+	}
+	return validateSavingsAccounts(h)
+}
+
+// validateSavingsAccounts checks any configured surplus destination. A
+// destination is not required up front: a household whose earnings never
+// exceed its spending target has no surplus to place, and registered
+// contribution routing (issue #18) will later absorb some of it. A named
+// destination must be a non_registered account. Ownership is the user's
+// explicit choice — a household may route a spouse's surplus to a jointly
+// held account modelled under the other spouse's name.
+func validateSavingsAccounts(h *Household) error {
+	for i := range h.Spouses {
+		s := &h.Spouses[i]
+		if s.SavingsAccount == "" {
+			continue
+		}
+		p := fmt.Sprintf("spouses[%d].savings_account", i)
+		found := false
+		for j := range h.Accounts {
+			a := &h.Accounts[j]
+			if a.Name != s.SavingsAccount {
+				continue
+			}
+			found = true
+			if a.Type != AccountNonRegistered {
+				return fieldError(p, "must name a non_registered account, %q is %s", a.Name, a.Type)
+			}
+			break
+		}
+		if !found {
+			return fieldError(p, "unknown account %q", s.SavingsAccount)
+		}
+	}
+	return nil
 }
 
 func validateSpouses(h *Household) error {
@@ -175,6 +211,9 @@ func validateSpouses(h *Household) error {
 		}
 		if s.RetirementAge > s.DeathAge {
 			return fieldError(p+".retirement_age", "%d is after death age %d", s.RetirementAge, s.DeathAge)
+		}
+		if s.EmploymentIncome < 0 {
+			return fieldError(p+".employment_income", "must not be negative, got %v", s.EmploymentIncome)
 		}
 		if s.CPP.MonthlyAt65 < 0 {
 			return fieldError(p+".cpp.monthly_at_65", "must not be negative, got %v", s.CPP.MonthlyAt65)
