@@ -367,6 +367,18 @@ func TestLoad_InvalidConfigNamesFirstOffendingField(t *testing.T) {
 			"  - name: A\n    birth_year: 1980\n    pension_split:\n      - year: 2040\n        fraction: 0.3\n      - year: 2040\n        fraction: 0.4\n",
 			"spouses[0].pension_split[1].year",
 		},
+		{
+			"cpp sharing fraction above 1",
+			"base_year: 2026",
+			"base_year: 2026\ncpp_sharing_fraction: 1.5",
+			"cpp_sharing_fraction",
+		},
+		{
+			"cpp sharing fraction below 0",
+			"base_year: 2026",
+			"base_year: 2026\ncpp_sharing_fraction: -0.1",
+			"cpp_sharing_fraction",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -391,6 +403,9 @@ spending: {target_today_dollars: 50000}
 `))
 	if h.Province != "ON" {
 		t.Fatalf("province = %q, want ON", h.Province)
+	}
+	if h.CPPSharingFraction != 0 {
+		t.Fatalf("cpp sharing fraction = %v, want default off (0)", h.CPPSharingFraction)
 	}
 	for i, s := range h.Spouses {
 		if s.DeathAge != 95 {
@@ -515,6 +530,16 @@ spending: {target_today_dollars: 60000}
 	}
 	if h.Spouses[1].EmploymentIncome != 60000 {
 		t.Fatalf("spouse B employment income = %v, want 60000", h.Spouses[1].EmploymentIncome)
+	}
+}
+
+// TestLoad_ParsesCPPSharingFraction covers the CPP sharing election input:
+// the user-set fraction is loaded and defaults to off when absent.
+func TestLoad_ParsesCPPSharingFraction(t *testing.T) {
+	text := strings.Replace(minimalValid, "base_year: 2026", "base_year: 2026\ncpp_sharing_fraction: 0.5", 1)
+	h := mustLoad(t, writeConfig(t, text))
+	if h.CPPSharingFraction != 0.5 {
+		t.Fatalf("cpp sharing fraction = %v, want 0.5", h.CPPSharingFraction)
 	}
 }
 

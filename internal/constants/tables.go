@@ -292,6 +292,22 @@ var CPPLateAdjustmentMonthly = Scalar{
 	Rows:         map[int]float64{2026: 0.007},
 }
 
+var CPPSurvivorUnder65Share = Scalar{
+	Desc:         "CPP survivor share of the deceased's retirement pension, survivor under 65",
+	Basis:        BasisFixed,
+	Source:       "ESDC",
+	LastVerified: "2026-09",
+	Rows:         map[int]float64{2026: 0.375},
+}
+
+var CPPSurvivor65PlusShare = Scalar{
+	Desc:         "CPP survivor share of the deceased's retirement pension, survivor 65 or older",
+	Basis:        BasisFixed,
+	Source:       "ESDC",
+	LastVerified: "2026-09",
+	Rows:         map[int]float64{2026: 0.60},
+}
+
 type OASYear struct {
 	Monthly65to74         float64
 	Monthly75Plus         float64
@@ -328,6 +344,14 @@ var OASDeferralMonthly = Scalar{
 	Source:       "ESDC",
 	LastVerified: "2026-09",
 	Rows:         map[int]float64{2026: 0.006},
+}
+
+var GISReductionRate = Scalar{
+	Desc:         "GIS reduction per dollar of other income",
+	Basis:        BasisFixed,
+	Source:       "ESDC",
+	LastVerified: "2026-09",
+	Rows:         map[int]float64{2026: 0.50},
 }
 
 type GISYear struct {

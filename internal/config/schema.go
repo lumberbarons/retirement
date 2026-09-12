@@ -7,6 +7,11 @@ type Household struct {
 	Accounts    []Account   `yaml:"accounts"`
 	Spending    Spending    `yaml:"spending"`
 	Assumptions Assumptions `yaml:"assumptions"`
+
+	// CPPSharingFraction is the joint ISP1002 election: the portion of the
+	// combined CPP retirement pensions that is pooled and re-split equally.
+	// Zero (the default) leaves both pensions untouched.
+	CPPSharingFraction float64 `yaml:"cpp_sharing_fraction"`
 }
 
 type Spouse struct {

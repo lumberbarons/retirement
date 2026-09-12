@@ -1,6 +1,10 @@
 base_year: 2026
 province: ON
 
+# Joint ISP1002 CPP-sharing election: the fraction of the combined CPP
+# retirement pensions pooled and re-split equally. 0 (the default) is off.
+cpp_sharing_fraction: 0
+
 spouses:
   - name: Alex
     birth_year: 1981

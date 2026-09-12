@@ -131,6 +131,9 @@ func Validate(h *Household) error {
 	if h.Province != defaultProvince {
 		return fieldError("province", "only ON is supported, got %q", h.Province)
 	}
+	if h.CPPSharingFraction < 0 || h.CPPSharingFraction > 1 {
+		return fieldError("cpp_sharing_fraction", "must be in [0, 1], got %v", h.CPPSharingFraction)
+	}
 	if err := validateSpouses(h); err != nil {
 		return err
 	}
