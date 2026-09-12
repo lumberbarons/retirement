@@ -227,6 +227,36 @@ assumptions: {portfolio_return: 0.05, inflation: 0.021}
 	}
 }
 
+// TestRun_PerSpouseIncomeAndTaxBreakdown covers the Done-when item that each
+// year carries income and tax separately for both spouses: unequal incomes
+// stay split, and the spouse rows reconcile with the household totals.
+func TestRun_PerSpouseIncomeAndTaxBreakdown(t *testing.T) {
+	results := mustRun(t, baseHousehold, 2026)
+	res := results[2046-2026]
+	if len(res.Spouses) != 2 {
+		t.Fatalf("2046 spouse rows = %d, want 2", len(res.Spouses))
+	}
+	alex, sam := res.Spouses[0], res.Spouses[1]
+	if alex.Name != "Alex" || sam.Name != "Sam" {
+		t.Fatalf("spouse names = %q/%q, want Alex/Sam", alex.Name, sam.Name)
+	}
+	if alex.GrossIncome <= sam.GrossIncome {
+		t.Fatalf("Alex income %v should exceed Sam's %v (Alex owns the drawn accounts)", alex.GrossIncome, sam.GrossIncome)
+	}
+	if alex.TaxableIncome <= sam.TaxableIncome {
+		t.Fatalf("Alex taxable income %v should exceed Sam's %v", alex.TaxableIncome, sam.TaxableIncome)
+	}
+	if alex.Tax <= sam.Tax {
+		t.Fatalf("Alex tax %v should exceed Sam's %v on the unequal incomes", alex.Tax, sam.Tax)
+	}
+	if sum := alex.GrossIncome + sam.GrossIncome; math.Abs(sum-res.GrossIncome) > 0.02 {
+		t.Fatalf("spouse incomes sum to %v, household gross income is %v", sum, res.GrossIncome)
+	}
+	if sum := alex.Tax + sam.Tax; math.Abs(sum-res.Tax) > 0.02 {
+		t.Fatalf("spouse taxes sum to %v, household tax is %v", sum, res.Tax)
+	}
+}
+
 func TestRun_ExhaustedAccountsFallShort(t *testing.T) {
 	yamlText := `base_year: 2026
 spouses:
