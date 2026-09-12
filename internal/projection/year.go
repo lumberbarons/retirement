@@ -3,6 +3,7 @@ package projection
 import (
 	"math"
 
+	"github.com/lumberbarons/retirement/internal/benefits"
 	"github.com/lumberbarons/retirement/internal/config"
 	"github.com/lumberbarons/retirement/internal/constants"
 	"github.com/lumberbarons/retirement/internal/tax"
@@ -20,6 +21,10 @@ type YearResult struct {
 	BeginTotal      float64
 	EndTotal        float64
 	MandatoryIncome float64
+	CPP             float64
+	OAS             float64
+	OASRecovery     float64
+	GIS             float64
 	Withdrawals     float64
 	GrossIncome     float64
 	TaxableIncome   float64
@@ -53,7 +58,9 @@ func (s *State) stepYear(h *config.Household) (YearResult, error) {
 	incomes := make([]tax.Income, len(s.People))
 	s.stepSnapshot(&res)
 	s.stepReturns(h, &res)
-	s.stepMandatoryIncome(incomes, &res)
+	if err := s.stepMandatoryIncome(h, incomes, &res); err != nil {
+		return YearResult{}, err
+	}
 	if err := s.stepDiscretionaryWithdrawals(h, incomes, &res); err != nil {
 		return YearResult{}, err
 	}
@@ -79,7 +86,7 @@ func (s *State) stepReturns(h *config.Household, res *YearResult) {
 	}
 }
 
-func (s *State) stepMandatoryIncome(incomes []tax.Income, res *YearResult) {
+func (s *State) stepMandatoryIncome(h *config.Household, incomes []tax.Income, res *YearResult) error {
 	for i, a := range s.Accounts {
 		if a.Type != config.AccountRRIF {
 			continue
@@ -104,6 +111,68 @@ func (s *State) stepMandatoryIncome(incomes []tax.Income, res *YearResult) {
 		res.MandatoryIncome += minimum
 		incomes[s.personIndex(a.Owner)].RRIFWithdrawals += minimum
 	}
+	return s.addGovernmentBenefits(h, incomes, res)
+}
+
+// addGovernmentBenefits records each alive spouse's CPP and OAS for the year
+// — zero before their start ages — adds them to the year's mandatory income,
+// and applies the user-set CPP sharing election. The survivor top-up is
+// applied by the death-event wiring, not here.
+func (s *State) addGovernmentBenefits(h *config.Household, incomes []tax.Income, res *YearResult) error {
+	f := s.forward(h)
+	cpp := make([]float64, len(s.People))
+	oas := make([]float64, len(s.People))
+	for i := range s.People {
+		p := &s.People[i]
+		if !p.Alive {
+			continue
+		}
+		v, err := benefits.CPPAnnual(p.CPPMonthlyAt65, p.CPPStartAge, p.BirthYear, s.Year, h.BaseYear, f)
+		if err != nil {
+			return err
+		}
+		cpp[i] = v
+		if oas[i], err = benefits.OASAnnual(p.OASStartAge, p.BirthYear, s.Year, f); err != nil {
+			return err
+		}
+	}
+	if err := s.applyCPPSharing(h, cpp); err != nil {
+		return err
+	}
+	for i := range s.People {
+		if !s.People[i].Alive {
+			continue
+		}
+		incomes[i].CPP += cpp[i]
+		incomes[i].OAS += oas[i]
+		res.CPP += cpp[i]
+		res.OAS += oas[i]
+	}
+	res.CPP = RoundCents(res.CPP)
+	res.OAS = RoundCents(res.OAS)
+	res.MandatoryIncome = RoundCents(res.MandatoryIncome + res.CPP + res.OAS)
+	return nil
+}
+
+// applyCPPSharing pools the elected fraction of the couple's CPP retirement
+// pensions and re-splits it equally. The election only applies while both
+// spouses are alive and past their own CPP start age.
+func (s *State) applyCPPSharing(h *config.Household, cpp []float64) error {
+	if h.CPPSharingFraction == 0 || len(cpp) != 2 {
+		return nil
+	}
+	for i := range s.People {
+		p := &s.People[i]
+		if !p.Alive || s.Year < p.BirthYear+p.CPPStartAge {
+			return nil
+		}
+	}
+	first, second, err := benefits.ShareCPP(cpp[0], cpp[1], h.CPPSharingFraction)
+	if err != nil {
+		return err
+	}
+	cpp[0], cpp[1] = first, second
+	return nil
 }
 
 func (s *State) stepDiscretionaryWithdrawals(h *config.Household, incomes []tax.Income, res *YearResult) error {
@@ -116,7 +185,12 @@ func (s *State) stepDiscretionaryWithdrawals(h *config.Household, incomes []tax.
 			solveErr = err
 			return 0
 		}
-		return res.MandatoryIncome + withdrawal - result.Total
+		recovery, gis, err := s.benefitAdjustments(h, trial, result)
+		if err != nil {
+			solveErr = err
+			return 0
+		}
+		return res.MandatoryIncome + withdrawal - result.Total - recovery + gis
 	}
 	withdrawal := RoundCents(SolveGross(res.TargetNominal, s.withdrawalCapacity(), net))
 	if solveErr != nil {
@@ -135,14 +209,58 @@ func (s *State) stepTaxes(h *config.Household, incomes []tax.Income, res *YearRe
 	if err != nil {
 		return err
 	}
+	recovery, gis, err := s.benefitAdjustments(h, incomes, result)
+	if err != nil {
+		return err
+	}
 	taxable := 0.0
 	for _, spouse := range result.Spouses {
 		taxable += spouse.TaxableIncome
 	}
 	res.TaxableIncome = RoundCents(taxable)
 	res.Tax = RoundCents(result.Total)
-	res.NetSpending = RoundCents(res.GrossIncome - res.Tax)
+	res.OASRecovery = RoundCents(recovery)
+	res.GIS = RoundCents(gis)
+	res.NetSpending = RoundCents(res.GrossIncome - res.Tax - res.OASRecovery + res.GIS)
 	return nil
+}
+
+// benefitAdjustments returns the year's OAS recovery tax and non-taxable GIS
+// for the household, given the income ledger and tax result. The recovery is
+// 15% of each spouse's net income over the threshold, capped at the pension
+// received; net income is approximated by taxable income and the recovery is
+// taken in the same year rather than on the real July-to-June cycle. GIS is
+// evaluated for each spouse receiving OAS, using the single test once one
+// spouse has died.
+func (s *State) benefitAdjustments(h *config.Household, incomes []tax.Income, result tax.Result) (recovery, gis float64, err error) {
+	f := s.forward(h)
+	single := s.survivors() == 1
+	for i := range s.People {
+		p := &s.People[i]
+		if !p.Alive {
+			continue
+		}
+		netIncome := result.Spouses[i].TaxableIncome
+		rec, err := benefits.OASRecovery(incomes[i].OAS, netIncome, s.Year, f)
+		if err != nil {
+			return 0, 0, err
+		}
+		recovery += rec
+		if s.Year < p.BirthYear+p.OASStartAge {
+			continue
+		}
+		g, err := benefits.GISAnnual(benefits.GISInput{
+			Year:        s.Year,
+			Forward:     f,
+			Single:      single,
+			OtherIncome: math.Max(0, netIncome-incomes[i].OAS),
+		})
+		if err != nil {
+			return 0, 0, err
+		}
+		gis += g
+	}
+	return recovery, gis, nil
 }
 
 func (s *State) stepRollForward(res *YearResult) {
@@ -164,6 +282,12 @@ func (s *State) stepDeathEvents(res *YearResult) {
 	}
 }
 
+// forward is the year's indexation input for the dated constants: the
+// configured CPI and wage-growth assumptions.
+func (s *State) forward(h *config.Household) constants.Forward {
+	return constants.Forward{CPI: h.Assumptions.Inflation, Wage: h.Assumptions.WageGrowth}
+}
+
 // householdTax maps the state's people and the year's income ledger onto the
 // tax package's joint-household input.
 func (s *State) householdTax(h *config.Household, incomes []tax.Income) (tax.Result, error) {
@@ -178,7 +302,7 @@ func (s *State) householdTax(h *config.Household, incomes []tax.Income) (tax.Res
 	}
 	return tax.Compute(tax.Household{
 		Year:    s.Year,
-		Forward: constants.Forward{CPI: h.Assumptions.Inflation, Wage: h.Assumptions.WageGrowth},
+		Forward: s.forward(h),
 		Spouses: spouses,
 	})
 }

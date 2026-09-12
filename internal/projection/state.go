@@ -16,11 +16,14 @@ func RoundCents(v float64) float64 {
 }
 
 type Person struct {
-	Name          string
-	BirthYear     int
-	DeathAge      int
-	RetirementAge int
-	Alive         bool
+	Name           string
+	BirthYear      int
+	DeathAge       int
+	RetirementAge  int
+	CPPMonthlyAt65 float64
+	CPPStartAge    int
+	OASStartAge    int
+	Alive          bool
 }
 
 func (p Person) AgeAtJan1(year int) int {
@@ -59,11 +62,14 @@ func NewState(h *config.Household, startYear int) *State {
 	s := &State{Year: startYear}
 	for _, sp := range h.Spouses {
 		s.People = append(s.People, Person{
-			Name:          sp.Name,
-			BirthYear:     sp.BirthYear,
-			DeathAge:      sp.DeathAge,
-			RetirementAge: sp.RetirementAge,
-			Alive:         startYear <= sp.BirthYear+sp.DeathAge,
+			Name:           sp.Name,
+			BirthYear:      sp.BirthYear,
+			DeathAge:       sp.DeathAge,
+			RetirementAge:  sp.RetirementAge,
+			CPPMonthlyAt65: sp.CPP.MonthlyAt65,
+			CPPStartAge:    sp.CPP.StartAge,
+			OASStartAge:    sp.OAS.StartAge,
+			Alive:          startYear <= sp.BirthYear+sp.DeathAge,
 		})
 	}
 	for i := range h.Accounts {

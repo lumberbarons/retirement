@@ -155,8 +155,11 @@ assumptions: {portfolio_return: 0.05, inflation: 0.021}
 	}
 	year2054 := results[2054-2026]
 	rrif2054 := accountYear(t, year2054, "Pat RRIF")
-	if year2054.MandatoryIncome != RoundCents(rrif2054.Begin*0.0528) {
-		t.Fatalf("2054 RRIF minimum = %v, want %v (age at Jan 1 is 71: 5.28%% of Jan-1 balance)", year2054.MandatoryIncome, RoundCents(rrif2054.Begin*0.0528))
+	// Mandatory income now also carries the couple's CPP and OAS; what
+	// remains is the RRIF minimum this test is about.
+	rrifMinimum2054 := year2054.MandatoryIncome - year2054.CPP - year2054.OAS
+	if want := RoundCents(rrif2054.Begin * 0.0528); math.Abs(rrifMinimum2054-want) > 0.005 {
+		t.Fatalf("2054 RRIF minimum = %v, want %v (age at Jan 1 is 71: 5.28%% of Jan-1 balance)", rrifMinimum2054, want)
 	}
 }
 
@@ -187,8 +190,10 @@ assumptions: {portfolio_return: 0.05, inflation: 0.021}
 		t.Fatalf("2074 RRIF begin = %v, want a positive balance to observe the minimum", rrif.Begin)
 	}
 	want2074 := RoundCents(rrif.Begin * constants.RRIFMinimumFactor(2074-1983-1))
-	if year2074.MandatoryIncome != want2074 {
-		t.Fatalf("2074 mandatory = %v, want %v (Sam's would-be age 90)", year2074.MandatoryIncome, want2074)
+	// Mandatory income also carries the survivor's OAS at this age; the RRIF
+	// minimum is what remains.
+	if minimum := year2074.MandatoryIncome - year2074.CPP - year2074.OAS; math.Abs(minimum-want2074) > 0.005 {
+		t.Fatalf("2074 mandatory = %v, want RRIF minimum %v (Sam's would-be age 90)", minimum, want2074)
 	}
 }
 
@@ -266,5 +271,206 @@ func TestRun_RejectsInvalidConfig(t *testing.T) {
 	h.Spouses = h.Spouses[:1]
 	if _, err := Run(h, 2026); err == nil {
 		t.Fatal("Run should reject an invalid household")
+	}
+}
+
+// withinDollar asserts the ±$1 tolerance the governing spec uses for
+// published benefit figures.
+func withinDollar(t *testing.T, got, want float64) {
+	t.Helper()
+	if math.Abs(got-want) > 1 {
+		t.Fatalf("got %v, want %v within $1", got, want)
+	}
+}
+
+// TestRun_CPPAndOASStartAtConfiguredAges covers the Done-when item that each
+// spouse's CPP is paid from their chosen start age at the actuarial factor,
+// and OAS defers to the chosen age: nothing before the start year, and both
+// indexed in pay.
+func TestRun_CPPAndOASStartAtConfiguredAges(t *testing.T) {
+	yamlText := `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1961, retirement_age: 40, cpp: {monthly_at_65: 1000, start_age: 65}, oas: {start_age: 65}}
+  - {name: Sam, birth_year: 1966, retirement_age: 40, cpp: {monthly_at_65: 1000, start_age: 70}, oas: {start_age: 70}}
+spending: {target_today_dollars: 10000, mode: flat}
+assumptions: {portfolio_return: 0.05, inflation: 0.021}
+`
+	results := mustRun(t, yamlText, 2026)
+	cpi10 := math.Pow(1.021, 10)
+
+	// 2026: Alex is 65, so only Alex's CPP and OAS are paid. With no
+	// accounts, they are the year's entire mandatory income.
+	withinDollar(t, results[0].CPP, 12*1000)
+	withinDollar(t, results[0].OAS, 12*742.31)
+	withinDollar(t, results[0].MandatoryIncome, results[0].CPP+results[0].OAS)
+
+	// 2035: Sam is 69, so Sam's CPP and OAS are still zero.
+	withinDollar(t, results[2035-2026].CPP, 12*1000*math.Pow(1.021, 9))
+	withinDollar(t, results[2035-2026].OAS, 12*742.31*math.Pow(1.021, 9))
+
+	// 2036: Sam turns 70 — CPP at 1.420x and OAS at +36%, while Alex turns 75
+	// into the permanent +10% OAS rate.
+	withinDollar(t, results[2036-2026].CPP, 12*1000*cpi10+12*1000*1.42*cpi10)
+	withinDollar(t, results[2036-2026].OAS, 12*816.54*cpi10+12*742.31*1.36*cpi10)
+}
+
+// TestRun_NoGISBeforeOASStarts covers the Done-when item that GIS is
+// evaluated in every projection year: it is nil before the spouse receives
+// OAS, then appears for a low-income pensioner.
+func TestRun_NoGISBeforeOASStarts(t *testing.T) {
+	yamlText := `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1966, retirement_age: 40, oas: {start_age: 65}}
+  - {name: Sam, birth_year: 1968, retirement_age: 40, oas: {start_age: 65}}
+spending: {target_today_dollars: 10000, mode: flat}
+assumptions: {portfolio_return: 0.05, inflation: 0.021}
+`
+	results := mustRun(t, yamlText, 2026)
+	if results[0].OAS != 0 || results[0].GIS != 0 {
+		t.Fatalf("2026 OAS/GIS = %v/%v, want 0 before any OAS start age", results[0].OAS, results[0].GIS)
+	}
+	if results[2031-2026].GIS <= 0 {
+		t.Fatalf("2031 GIS = %v, want positive once OAS is received on a low income", results[2031-2026].GIS)
+	}
+}
+
+// TestRun_OASRecoveryClawsBackAtHighIncome covers the Done-when item that the
+// 15% recovery tax is applied over the threshold and reaches full clawback:
+// a high-income household's OAS is recovered in full, and the gross-vs-net
+// solve compensates for the recovery.
+func TestRun_OASRecoveryClawsBackAtHighIncome(t *testing.T) {
+	yamlText := `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1956, retirement_age: 40}
+  - {name: Sam, birth_year: 1956, retirement_age: 40}
+accounts:
+  - {name: Alex RRIF, type: rrif, owner: Alex, balance: 4000000}
+  - {name: Sam RRIF, type: rrif, owner: Sam, balance: 4000000}
+spending: {target_today_dollars: 300000, mode: flat}
+assumptions: {portfolio_return: 0.05, inflation: 0.021}
+`
+	first := mustRun(t, yamlText, 2026)[0]
+	if first.OAS <= 0 {
+		t.Fatalf("OAS = %v, want a positive pension before the recovery", first.OAS)
+	}
+	withinDollar(t, first.OASRecovery, first.OAS)
+	if first.GIS != 0 {
+		t.Fatalf("GIS = %v, want 0 for a high-income household", first.GIS)
+	}
+	if math.Abs(first.NetSpending-first.TargetNominal) > 1 {
+		t.Fatalf("net spending = %v, want the funded target %v after the recovery", first.NetSpending, first.TargetNominal)
+	}
+}
+
+// TestRun_GISIsZeroForAffluentHousehold covers the zero years of the
+// Done-when item: an affluent household is evaluated every year and never
+// qualifies.
+func TestRun_GISIsZeroForAffluentHousehold(t *testing.T) {
+	yamlText := `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1956, retirement_age: 40, cpp: {monthly_at_65: 1500, start_age: 65}}
+  - {name: Sam, birth_year: 1958, retirement_age: 40, cpp: {monthly_at_65: 1200, start_age: 65}}
+accounts:
+  - {name: Alex RRIF, type: rrif, owner: Alex, balance: 5000000}
+  - {name: Sam RRIF, type: rrif, owner: Sam, balance: 3000000}
+spending: {target_today_dollars: 120000, mode: flat}
+assumptions: {portfolio_return: 0.05, inflation: 0.021}
+`
+	for _, res := range mustRun(t, yamlText, 2026) {
+		if res.GIS != 0 {
+			t.Fatalf("GIS in %d = %v, want 0 for an affluent household", res.Year, res.GIS)
+		}
+		if res.OAS <= 0 {
+			t.Fatalf("OAS in %d = %v, want the pension evaluated every year", res.Year, res.OAS)
+		}
+	}
+}
+
+// TestRun_GISReappearsForLowIncomeSurvivor covers the reason GIS is evaluated
+// every year: a low-income survivor brings it back above zero.
+func TestRun_GISReappearsForLowIncomeSurvivor(t *testing.T) {
+	yamlText := `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1956, retirement_age: 60, death_age: 75, cpp: {monthly_at_65: 200, start_age: 65}}
+  - {name: Sam, birth_year: 1956, retirement_age: 60, death_age: 95, cpp: {monthly_at_65: 200, start_age: 65}}
+spending: {target_today_dollars: 10000, mode: flat}
+assumptions: {portfolio_return: 0.03, inflation: 0.021}
+`
+	results := mustRun(t, yamlText, 2026)
+	if got := results[2031-2026].Deaths; len(got) != 1 || got[0] != "Alex" {
+		t.Fatalf("2031 deaths = %v, want [Alex]", got)
+	}
+	if results[2032-2026].GIS <= 0 {
+		t.Fatalf("2032 GIS = %v, want positive for a low-income survivor", results[2032-2026].GIS)
+	}
+}
+
+// TestRun_CPPSharingShiftsIncomeBetweenSpouses covers the Done-when item that
+// a user-set sharing election is honoured without changing the combined
+// pensions, and that the default of zero leaves them untouched.
+func TestRun_CPPSharingShiftsIncomeBetweenSpouses(t *testing.T) {
+	const shared = `base_year: 2026
+cpp_sharing_fraction: 0.5
+spouses:
+  - {name: Alex, birth_year: 1956, retirement_age: 40, cpp: {monthly_at_65: 2000, start_age: 65}}
+  - {name: Sam, birth_year: 1956, retirement_age: 40, cpp: {monthly_at_65: 0, start_age: 65}}
+accounts:
+  - {name: Alex RRIF, type: rrif, owner: Alex, balance: 800000}
+  - {name: Sam RRIF, type: rrif, owner: Sam, balance: 200000}
+spending: {target_today_dollars: 100000, mode: flat}
+assumptions: {portfolio_return: 0.05, inflation: 0.021}
+`
+	withSharing := mustRun(t, shared, 2026)
+
+	h := mustHousehold(t, shared)
+	h.CPPSharingFraction = 0
+	withoutSharing, err := Run(h, 2026)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	withinDollar(t, withSharing[0].CPP, withoutSharing[0].CPP)
+	if withSharing[0].Tax >= withoutSharing[0].Tax {
+		t.Fatalf("shared tax %v, want below the unshared tax %v (income shifted to the lower earner)",
+			withSharing[0].Tax, withoutSharing[0].Tax)
+	}
+	if math.Abs(withSharing[0].NetSpending-withSharing[0].TargetNominal) > 1 {
+		t.Fatalf("shared net spending = %v, want the funded target %v", withSharing[0].NetSpending, withSharing[0].TargetNominal)
+	}
+}
+
+// TestApplyCPPSharing_OnlyWhileBothReceive covers the election's guard: the
+// pooling applies only while both spouses are alive and past their own CPP
+// start age.
+func TestApplyCPPSharing_OnlyWhileBothReceive(t *testing.T) {
+	s := &State{Year: 2026, People: []Person{
+		{Name: "Alex", BirthYear: 1961, CPPStartAge: 65, Alive: true},
+		{Name: "Sam", BirthYear: 1966, CPPStartAge: 70, Alive: true},
+	}}
+	h := &config.Household{CPPSharingFraction: 1}
+
+	cpp := []float64{12000, 0}
+	if err := s.applyCPPSharing(h, cpp); err != nil {
+		t.Fatalf("applyCPPSharing: %v", err)
+	}
+	if cpp[0] != 12000 || cpp[1] != 0 {
+		t.Fatalf("pensions = %v/%v, want 12000/0 before both receive CPP", cpp[0], cpp[1])
+	}
+
+	s.Year = 2036
+	if err := s.applyCPPSharing(h, cpp); err != nil {
+		t.Fatalf("applyCPPSharing: %v", err)
+	}
+	if cpp[0] != 6000 || cpp[1] != 6000 {
+		t.Fatalf("pensions = %v/%v, want the pooled 6000/6000 once both receive", cpp[0], cpp[1])
+	}
+
+	s.People[1].Alive = false
+	cpp = []float64{12000, 0}
+	if err := s.applyCPPSharing(h, cpp); err != nil {
+		t.Fatalf("applyCPPSharing: %v", err)
+	}
+	if cpp[0] != 12000 || cpp[1] != 0 {
+		t.Fatalf("pensions = %v/%v, want no sharing after a death", cpp[0], cpp[1])
 	}
 }

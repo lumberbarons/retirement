@@ -84,6 +84,60 @@ func TestWriteTable_ShowsEveryYearInBothFrames(t *testing.T) {
 	}
 }
 
+// TestWriteCSV_ShowsGovernmentBenefitsAndClawback covers the issue's goal
+// that the projection shows what the household receives and what gets clawed
+// back: CPP, OAS, GIS, and the recovery tax each get a column, in both frames.
+func TestWriteCSV_ShowsGovernmentBenefitsAndClawback(t *testing.T) {
+	years := []projection.YearResult{
+		{Year: 2046, CPP: 12000, OAS: 8907.72, OASRecovery: 8907.72, GIS: 1234.56},
+	}
+	r := New(2026, 0.021, years)
+	var buf strings.Builder
+	if err := r.WriteCSV(&buf); err != nil {
+		t.Fatalf("WriteCSV: %v", err)
+	}
+	rows, err := csv.NewReader(strings.NewReader(buf.String())).ReadAll()
+	if err != nil {
+		t.Fatalf("csv parse: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("csv rows = %d, want 2 (header + 1 year)", len(rows))
+	}
+	column := map[string]int{}
+	for i, name := range rows[0] {
+		column[name] = i
+	}
+	for name, want := range map[string]float64{
+		"cpp_nominal":          12000,
+		"cpp_real":             r.Real(12000, 2046),
+		"oas_nominal":          8907.72,
+		"oas_real":             r.Real(8907.72, 2046),
+		"oas_recovery_nominal": 8907.72,
+		"oas_recovery_real":    r.Real(8907.72, 2046),
+		"gis_nominal":          1234.56,
+		"gis_real":             r.Real(1234.56, 2046),
+	} {
+		idx, ok := column[name]
+		if !ok {
+			t.Fatalf("csv header missing column %q", name)
+		}
+		got, err := strconv.ParseFloat(rows[1][idx], 64)
+		if err != nil || math.Abs(got-want) > 0.01 {
+			t.Fatalf("column %s = %s, want ~%v", name, rows[1][idx], want)
+		}
+	}
+
+	var table strings.Builder
+	if err := r.WriteTable(&table); err != nil {
+		t.Fatalf("WriteTable: %v", err)
+	}
+	for _, want := range []string{"cpp nominal", "oas nominal", "oas recovery nominal", "gis nominal"} {
+		if !strings.Contains(table.String(), want) {
+			t.Fatalf("table missing %q:\n%s", want, table.String())
+		}
+	}
+}
+
 func TestSummary_ReadsTerminalRealWealthAgainstZeroEstateTarget(t *testing.T) {
 	r := New(2026, 0.021, testYears())
 	s := r.Summary()

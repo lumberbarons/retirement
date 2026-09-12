@@ -63,9 +63,13 @@ func (r *Report) WriteCSV(w io.Writer) error {
 	header := []string{
 		"year",
 		"mandatory_income_nominal", "mandatory_income_real",
+		"cpp_nominal", "cpp_real",
+		"oas_nominal", "oas_real",
+		"gis_nominal", "gis_real",
 		"withdrawals_nominal", "withdrawals_real",
 		"gross_income_nominal", "gross_income_real",
 		"tax_nominal", "tax_real",
+		"oas_recovery_nominal", "oas_recovery_real",
 		"net_spending_nominal", "net_spending_real",
 		"end_balance_nominal", "end_balance_real",
 	}
@@ -76,9 +80,13 @@ func (r *Report) WriteCSV(w io.Writer) error {
 		row := []string{
 			strconv.Itoa(y.Year),
 			cents(y.MandatoryIncome), cents(r.Real(y.MandatoryIncome, y.Year)),
+			cents(y.CPP), cents(r.Real(y.CPP, y.Year)),
+			cents(y.OAS), cents(r.Real(y.OAS, y.Year)),
+			cents(y.GIS), cents(r.Real(y.GIS, y.Year)),
 			cents(y.Withdrawals), cents(r.Real(y.Withdrawals, y.Year)),
 			cents(y.GrossIncome), cents(r.Real(y.GrossIncome, y.Year)),
 			cents(y.Tax), cents(r.Real(y.Tax, y.Year)),
+			cents(y.OASRecovery), cents(r.Real(y.OASRecovery, y.Year)),
 			cents(y.NetSpending), cents(r.Real(y.NetSpending, y.Year)),
 			cents(y.EndTotal), cents(r.Real(y.EndTotal, y.Year)),
 		}
@@ -95,12 +103,13 @@ func (r *Report) WriteTable(w io.Writer) error {
 		return errEmpty
 	}
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "year\tspend nominal\tspend today's\tincome nominal\ttax nominal\twithdrawals nominal\tend balance nominal\tend balance today's")
+	fmt.Fprintln(tw, "year\tspend nominal\tspend today's\tincome nominal\tcpp nominal\toas nominal\toas recovery nominal\tgis nominal\ttax nominal\twithdrawals nominal\tend balance nominal\tend balance today's")
 	for _, y := range r.Years {
-		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			y.Year,
 			cents(y.NetSpending), cents(r.Real(y.NetSpending, y.Year)),
 			cents(y.GrossIncome),
+			cents(y.CPP), cents(y.OAS), cents(y.OASRecovery), cents(y.GIS),
 			cents(y.Tax),
 			cents(y.Withdrawals),
 			cents(y.EndTotal), cents(r.Real(y.EndTotal, y.Year)),
