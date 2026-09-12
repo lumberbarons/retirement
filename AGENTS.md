@@ -19,3 +19,4 @@ ADRs live in `docs/adr/`. Read the relevant ADRs before proposing architectural 
 | `docs/adr/0002-use-nominal-dollar-engine.md` | Any change to how dollar amounts, inflation, or indexation are handled — the nominal-vs-real frame, constant index bases, or where deflation happens. |
 | `docs/adr/0003-store-constants-in-dated-tables.md` | Any addition, removal, or re-verification of tax/benefit/assumption figures, or changes to how constants are selected for a projection year. |
 | `docs/adr/0004-use-float64-for-money.md` | Any change to how dollar amounts are represented, rounded, or compared — money types, cent-rounding boundaries, or equality checks. |
+| `docs/adr/0005-enforce-correctness-with-ci-gates.md` | Any change to the test suite, CI verification gates, golden fixtures, or how a new engine feature is proven correct — validation cases, invariant/property tests, mutation or fuzz gates. |
