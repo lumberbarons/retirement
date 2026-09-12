@@ -16,6 +16,17 @@ type AccountYear struct {
 	End        float64
 }
 
+// SpouseYear is one spouse's share of a projected year: the cash income the
+// year attributes to them and the tax they bear. The measure matches the
+// household's GrossIncome — CPP, OAS, RRIF minimums, and withdrawals from
+// accounts they own — so the spouse rows reconcile with the household total.
+type SpouseYear struct {
+	Name          string
+	GrossIncome   float64
+	TaxableIncome float64
+	Tax           float64
+}
+
 type YearResult struct {
 	Year            int
 	BeginTotal      float64
@@ -32,6 +43,7 @@ type YearResult struct {
 	NetSpending     float64
 	TargetNominal   float64
 	Accounts        []AccountYear
+	Spouses         []SpouseYear
 	Deaths          []string
 }
 
@@ -77,6 +89,10 @@ func (s *State) stepSnapshot(res *YearResult) {
 	for i, a := range s.Accounts {
 		res.Accounts[i] = AccountYear{Name: a.Name, Begin: a.Balance}
 		res.BeginTotal += a.Balance
+	}
+	res.Spouses = make([]SpouseYear, len(s.People))
+	for i, p := range s.People {
+		res.Spouses[i] = SpouseYear{Name: p.Name}
 	}
 }
 
@@ -214,8 +230,19 @@ func (s *State) stepTaxes(h *config.Household, incomes []tax.Income, res *YearRe
 		return err
 	}
 	taxable := 0.0
-	for _, spouse := range result.Spouses {
+	for i, spouse := range result.Spouses {
 		taxable += spouse.TaxableIncome
+		// Gross income uses the same measure as the household total: CPP,
+		// OAS, and every withdrawal from an account the spouse owns.
+		gross := incomes[i].CPP + incomes[i].OAS
+		for j, a := range s.Accounts {
+			if a.Owner == s.People[i].Name {
+				gross += res.Accounts[j].Withdrawal
+			}
+		}
+		res.Spouses[i].GrossIncome = RoundCents(gross)
+		res.Spouses[i].TaxableIncome = RoundCents(spouse.TaxableIncome)
+		res.Spouses[i].Tax = RoundCents(spouse.TotalTax)
 	}
 	res.TaxableIncome = RoundCents(taxable)
 	res.Tax = RoundCents(result.Total)

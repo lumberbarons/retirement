@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lumberbarons/retirement/internal/config"
 	"github.com/lumberbarons/retirement/internal/projection"
 )
 
@@ -189,5 +190,177 @@ func TestWriteCSV_EmptyProjectionErrors(t *testing.T) {
 	r := New(2026, 0.021, nil)
 	if err := r.WriteCSV(io.Discard); err == nil {
 		t.Fatal("WriteCSV on an empty projection should error")
+	}
+}
+
+// spouseAndAccountYears is a one-year fixture with unequal spouse incomes and
+// withdrawals from two different accounts.
+func spouseAndAccountYears() []projection.YearResult {
+	return []projection.YearResult{
+		{
+			Year: 2046, BeginTotal: 700000, EndTotal: 660000,
+			Spouses: []projection.SpouseYear{
+				{Name: "Alex", GrossIncome: 90000, TaxableIncome: 85000, Tax: 18000},
+				{Name: "Sam", GrossIncome: 30000, TaxableIncome: 25000, Tax: 2500},
+			},
+			Accounts: []projection.AccountYear{
+				{Name: "Alex RRSP", Begin: 450000, Withdrawal: 60000, End: 412500},
+				{Name: "Sam TFSA", Begin: 100000, Withdrawal: 20000, End: 85000},
+			},
+		},
+	}
+}
+
+// csvYearRow parses a report and returns the data row for the given year,
+// keyed by header name.
+func csvYearRow(t *testing.T, r *Report, year int) map[string]string {
+	t.Helper()
+	var buf strings.Builder
+	if err := r.WriteCSV(&buf); err != nil {
+		t.Fatalf("WriteCSV: %v", err)
+	}
+	rows, err := csv.NewReader(strings.NewReader(buf.String())).ReadAll()
+	if err != nil {
+		t.Fatalf("csv parse: %v", err)
+	}
+	out := map[string]string{}
+	for i, res := range r.Years {
+		if res.Year != year {
+			continue
+		}
+		row := rows[i+1]
+		for j, name := range rows[0] {
+			out[name] = row[j]
+		}
+		return out
+	}
+	t.Fatalf("csv has no row for year %d", year)
+	return nil
+}
+
+func columnFloat(t *testing.T, row map[string]string, name string) float64 {
+	t.Helper()
+	raw, ok := row[name]
+	if !ok {
+		t.Fatalf("csv missing column %q (have %v)", name, row)
+	}
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		t.Fatalf("column %s = %q is not a number", name, raw)
+	}
+	return v
+}
+
+// TestWriteCSV_ShowsPerSpouseIncomeAndTax covers the Done-when item that each
+// year reports income and tax separately for both spouses.
+func TestWriteCSV_ShowsPerSpouseIncomeAndTax(t *testing.T) {
+	r := New(2026, 0.021, spouseAndAccountYears())
+	row := csvYearRow(t, r, 2046)
+	for name, want := range map[string]float64{
+		"alex_income_nominal":         90000,
+		"alex_income_real":            90000 / math.Pow(1.021, 20),
+		"alex_taxable_income_nominal": 85000,
+		"alex_tax_nominal":            18000,
+		"alex_tax_real":               18000 / math.Pow(1.021, 20),
+		"sam_income_nominal":          30000,
+		"sam_income_real":             30000 / math.Pow(1.021, 20),
+		"sam_taxable_income_nominal":  25000,
+		"sam_tax_nominal":             2500,
+	} {
+		if got := columnFloat(t, row, name); math.Abs(got-want) > 0.01 {
+			t.Fatalf("column %s = %v, want ~%v", name, got, want)
+		}
+	}
+}
+
+// TestWriteCSV_ShowsAccountBalancesAndWithdrawals covers the Done-when item
+// that each year reports beginning balance, withdrawals, and ending balance
+// for every account.
+func TestWriteCSV_ShowsAccountBalancesAndWithdrawals(t *testing.T) {
+	r := New(2026, 0.021, spouseAndAccountYears())
+	row := csvYearRow(t, r, 2046)
+	for name, want := range map[string]float64{
+		"alex_rrsp_begin_nominal":       450000,
+		"alex_rrsp_begin_real":          450000 / math.Pow(1.021, 20),
+		"alex_rrsp_withdrawals_nominal": 60000,
+		"alex_rrsp_end_nominal":         412500,
+		"alex_rrsp_end_real":            412500 / math.Pow(1.021, 20),
+		"sam_tfsa_begin_nominal":        100000,
+		"sam_tfsa_withdrawals_nominal":  20000,
+		"sam_tfsa_withdrawals_real":     20000 / math.Pow(1.021, 20),
+		"sam_tfsa_end_nominal":          85000,
+	} {
+		if got := columnFloat(t, row, name); math.Abs(got-want) > 0.01 {
+			t.Fatalf("column %s = %v, want ~%v", name, got, want)
+		}
+	}
+}
+
+// TestWriteTable_ShowsSpouseAndAccountDetail covers the Done-when item that
+// the text output exposes the same spouse and account detail as the CSV,
+// alongside the retained household totals.
+func TestWriteTable_ShowsSpouseAndAccountDetail(t *testing.T) {
+	r := New(2026, 0.021, spouseAndAccountYears())
+	var buf strings.Builder
+	if err := r.WriteTable(&buf); err != nil {
+		t.Fatalf("WriteTable: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"end balance nominal",
+		"Alex", "Sam",
+		"income nominal", "tax nominal", "taxable income nominal",
+		"Alex RRSP", "Sam TFSA",
+		"begin nominal", "withdrawals nominal", "end nominal",
+		"90000.00", "18000.00",
+		"450000.00", "60000.00", "412500.00",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("table missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// TestWriteCSV_ProjectionShowsUnequalSpouseIncomesAndMultipleWithdrawals
+// covers the Done-when item that report tests verify unequal spouse incomes
+// and withdrawals from more than one account: it runs a real projection and
+// checks the rendered CSV, not a hand-built fixture.
+func TestWriteCSV_ProjectionShowsUnequalSpouseIncomesAndMultipleWithdrawals(t *testing.T) {
+	const household = `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1956, retirement_age: 40}
+  - {name: Sam, birth_year: 1958, retirement_age: 40}
+accounts:
+  - {name: Alex RRSP, type: rrsp, owner: Alex, balance: 700000}
+  - {name: Sam TFSA, type: tfsa, owner: Sam, balance: 120000}
+  - {name: Joint taxable, type: non_registered, owner: Alex, balance: 50000, acb: 40000}
+spending: {target_today_dollars: 90000, mode: flat}
+assumptions: {portfolio_return: 0.05, inflation: 0.021}
+`
+	h, err := config.Parse([]byte(household))
+	if err != nil {
+		t.Fatalf("config parse: %v", err)
+	}
+	years, err := projection.Run(h, 2026)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	r := New(h.BaseYear, h.Assumptions.Inflation, years)
+	row := csvYearRow(t, r, 2026)
+
+	alexIncome := columnFloat(t, row, "alex_income_nominal")
+	samIncome := columnFloat(t, row, "sam_income_nominal")
+	if alexIncome <= samIncome {
+		t.Fatalf("Alex income %v should exceed Sam's %v (Alex owns the drawn registered accounts)", alexIncome, samIncome)
+	}
+
+	drawn := 0
+	for _, account := range []string{"joint_taxable", "alex_rrsp", "sam_tfsa"} {
+		if columnFloat(t, row, account+"_withdrawals_nominal") > 0 {
+			drawn++
+		}
+	}
+	if drawn < 2 {
+		t.Fatalf("withdrawals from %d accounts, want more than one", drawn)
 	}
 }
