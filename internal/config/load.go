@@ -143,23 +143,37 @@ func Validate(h *Household) error {
 	if err := validatePlan(h); err != nil {
 		return err
 	}
-	return validateEmploymentSavings(h)
+	return validateSavingsAccounts(h)
 }
 
-// validateEmploymentSavings requires a non_registered account whenever a
-// spouse declares employment income: pre-retirement surplus is retained
-// there, and without one the engine would have nowhere to deposit it.
-func validateEmploymentSavings(h *Household) error {
-	for i := range h.Accounts {
-		if h.Accounts[i].Type == AccountNonRegistered {
-			return nil
-		}
-	}
+// validateSavingsAccounts checks any configured surplus destination. A
+// destination is not required up front: a household whose earnings never
+// exceed its spending target has no surplus to place, and registered
+// contribution routing (issue #18) will later absorb some of it. A named
+// destination must be a non_registered account. Ownership is the user's
+// explicit choice — a household may route a spouse's surplus to a jointly
+// held account modelled under the other spouse's name.
+func validateSavingsAccounts(h *Household) error {
 	for i := range h.Spouses {
 		s := &h.Spouses[i]
-		if s.EmploymentIncome > 0 && s.BirthYear+s.RetirementAge >= h.BaseYear {
-			return fieldError(fmt.Sprintf("spouses[%d].employment_income", i),
-				"requires a non_registered account to hold surplus savings")
+		if s.SavingsAccount == "" {
+			continue
+		}
+		p := fmt.Sprintf("spouses[%d].savings_account", i)
+		found := false
+		for j := range h.Accounts {
+			a := &h.Accounts[j]
+			if a.Name != s.SavingsAccount {
+				continue
+			}
+			found = true
+			if a.Type != AccountNonRegistered {
+				return fieldError(p, "must name a non_registered account, %q is %s", a.Name, a.Type)
+			}
+			break
+		}
+		if !found {
+			return fieldError(p, "unknown account %q", s.SavingsAccount)
 		}
 	}
 	return nil

@@ -12,8 +12,8 @@ import (
 
 const baseHousehold = `base_year: 2026
 spouses:
-  - {name: Alex, birth_year: 1981, retirement_age: 60, employment_income: 150000}
-  - {name: Sam, birth_year: 1983, retirement_age: 62, employment_income: 90000}
+  - {name: Alex, birth_year: 1981, retirement_age: 60, employment_income: 150000, savings_account: Joint taxable}
+  - {name: Sam, birth_year: 1983, retirement_age: 62, employment_income: 90000, savings_account: Joint taxable}
 accounts:
   - {name: Alex TFSA, type: tfsa, owner: Alex, balance: 100000}
   - {name: Alex RRSP, type: rrsp, owner: Alex, balance: 450000}
@@ -92,6 +92,9 @@ func TestRun_WorkingYearFundsTargetFromEmploymentIncome(t *testing.T) {
 	if first.Surplus <= 0 {
 		t.Fatalf("2026 surplus = %v, want positive after-tax earnings above the target", first.Surplus)
 	}
+	if want := RoundCents(2 * (71100*0.0595 + 10400*0.04)); first.CPPContributions != want {
+		t.Fatalf("2026 CPP contributions = %v, want %v (both spouses at the YAMPE cap)", first.CPPContributions, want)
+	}
 	wantMinimum := RoundCents(50000 * (1.0 / 48.0))
 	if first.MandatoryIncome != wantMinimum {
 		t.Fatalf("2026 mandatory = %v, want Sam's RRIF minimum %v (age at Jan 1 is 42)", first.MandatoryIncome, wantMinimum)
@@ -105,7 +108,8 @@ func TestRun_WorkingYearFundsTargetFromEmploymentIncome(t *testing.T) {
 	if want := RoundCents(200000*1.05) + first.Surplus; taxable.End != want {
 		t.Fatalf("Joint taxable end = %v, want %v (grown balance plus retained surplus)", taxable.End, want)
 	}
-	if want := RoundCents(first.EmploymentIncome + first.MandatoryIncome - first.Tax - first.TargetNominal); first.Surplus != want {
+	if want := RoundCents(first.EmploymentIncome + first.MandatoryIncome - first.Tax -
+		first.CPPContributions - first.TargetNominal); first.Surplus != want {
 		t.Fatalf("2026 surplus = %v, want after-tax earnings above target %v", first.Surplus, want)
 	}
 	wantEnd := RoundCents(100000*1.05) + RoundCents(450000*1.05) +
@@ -209,7 +213,9 @@ spending: {target_today_dollars: 50000}
 	s := NewState(h, 2026)
 	incomes := make([]tax.Income, len(s.People))
 	var res YearResult
-	s.stepEmploymentIncome(h, incomes, &res)
+	if err := s.stepEmploymentIncome(h, incomes, &res); err != nil {
+		t.Fatalf("stepEmploymentIncome: %v", err)
+	}
 	if incomes[0].Employment != 100000 {
 		t.Fatalf("Alex employment = %v, want 100000", incomes[0].Employment)
 	}
@@ -218,6 +224,15 @@ spending: {target_today_dollars: 50000}
 	}
 	if res.EmploymentIncome != 100000 {
 		t.Fatalf("year employment income = %v, want 100000", res.EmploymentIncome)
+	}
+	if want := RoundCents(71100*0.0595 + 10400*0.04); incomes[0].CPPContributions != want {
+		t.Fatalf("Alex CPP contributions = %v, want %v", incomes[0].CPPContributions, want)
+	}
+	if incomes[1].CPPContributions != 0 {
+		t.Fatalf("Sam CPP contributions = %v, want 0 with no earnings", incomes[1].CPPContributions)
+	}
+	if res.CPPContributions != incomes[0].CPPContributions {
+		t.Fatalf("year CPP contributions = %v, want the earner's %v", res.CPPContributions, incomes[0].CPPContributions)
 	}
 }
 
@@ -266,6 +281,151 @@ assumptions: {portfolio_return: 0.05, inflation: 0.021}
 	}
 	if want := RoundCents(100000*1.05) + res.Surplus; res.EndTotal != want {
 		t.Fatalf("end total = %v, want %v (the surplus stays in the household)", res.EndTotal, want)
+	}
+}
+
+// TestRun_SurplusStaysWithItsEarnerWhenAccountsAreReversed covers surplus
+// ownership: with one taxable account per spouse, each spouse's share lands
+// in their own account even though the other spouse's account is listed first
+// in config order.
+func TestRun_SurplusStaysWithItsEarnerWhenAccountsAreReversed(t *testing.T) {
+	results := mustRun(t, `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1981, retirement_age: 60, employment_income: 150000}
+  - {name: Sam, birth_year: 1983, retirement_age: 62, employment_income: 60000}
+accounts:
+  - {name: Sam taxable, type: non_registered, owner: Sam, balance: 100000, acb: 90000}
+  - {name: Alex taxable, type: non_registered, owner: Alex, balance: 200000, acb: 150000}
+spending: {target_today_dollars: 70000, mode: flat}
+assumptions: {portfolio_return: 0.05, inflation: 0.021}
+`, 2026)
+	first := results[0]
+	alex, sam := first.Spouses[0], first.Spouses[1]
+	if alex.Surplus <= 0 || sam.Surplus <= 0 {
+		t.Fatalf("spouse surplus = %v/%v, want both positive", alex.Surplus, sam.Surplus)
+	}
+	if alex.Surplus <= sam.Surplus {
+		t.Fatalf("Alex surplus %v should exceed Sam's %v on the higher income", alex.Surplus, sam.Surplus)
+	}
+	if first.UnallocatedSurplus != 0 {
+		t.Fatalf("unallocated surplus = %v, want 0 with an owned account each", first.UnallocatedSurplus)
+	}
+	alexAccount := accountYear(t, first, "Alex taxable")
+	if want := RoundCents(200000*1.05) + alex.Surplus; alexAccount.End != want {
+		t.Fatalf("Alex taxable end = %v, want %v (only Alex's share)", alexAccount.End, want)
+	}
+	samAccount := accountYear(t, first, "Sam taxable")
+	if want := RoundCents(100000*1.05) + sam.Surplus; samAccount.End != want {
+		t.Fatalf("Sam taxable end = %v, want %v (only Sam's share)", samAccount.End, want)
+	}
+	if want := alexAccount.End + samAccount.End; first.EndTotal != want {
+		t.Fatalf("end total = %v, want the two taxable accounts summed %v", first.EndTotal, want)
+	}
+}
+
+// TestRun_SavingsAccountRoutesSurplusExplicitly covers the declared
+// destination: a spouse can route their surplus into a jointly held account
+// modelled under the other spouse's name.
+func TestRun_SavingsAccountRoutesSurplusExplicitly(t *testing.T) {
+	results := mustRun(t, `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1981, retirement_age: 60, employment_income: 150000, savings_account: Joint taxable}
+  - {name: Sam, birth_year: 1983, retirement_age: 62, employment_income: 90000, savings_account: Joint taxable}
+accounts:
+  - {name: Joint taxable, type: non_registered, owner: Alex, balance: 200000, acb: 150000}
+spending: {target_today_dollars: 80000, mode: flat}
+assumptions: {portfolio_return: 0.05, inflation: 0.021}
+`, 2026)
+	first := results[0]
+	if first.Surplus <= 0 || first.UnallocatedSurplus != 0 {
+		t.Fatalf("surplus/unallocated = %v/%v, want positive at the declared destination", first.Surplus, first.UnallocatedSurplus)
+	}
+	if got := first.Spouses[0].Surplus + first.Spouses[1].Surplus; got != first.Surplus {
+		t.Fatalf("spouse surplus sums to %v, want the household surplus %v", got, first.Surplus)
+	}
+	taxable := accountYear(t, first, "Joint taxable")
+	if want := RoundCents(200000*1.05) + first.Surplus; taxable.End != want {
+		t.Fatalf("Joint taxable end = %v, want %v (the whole household surplus)", taxable.End, want)
+	}
+}
+
+// TestRun_UnallocatedSurplusIsReported covers a working household with no
+// taxable account: the config is valid, the projection completes, and the
+// surplus that has nowhere to go is reported rather than silently dropped.
+func TestRun_UnallocatedSurplusIsReported(t *testing.T) {
+	results := mustRun(t, `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1981, retirement_age: 60, employment_income: 100000}
+  - {name: Sam, birth_year: 1983, retirement_age: 62}
+accounts:
+  - {name: Savings RRSP, type: rrsp, owner: Alex, balance: 500000}
+spending: {target_today_dollars: 40000, mode: flat}
+assumptions: {portfolio_return: 0.05, inflation: 0.021}
+`, 2026)
+	first := results[0]
+	if first.Surplus <= 0 {
+		t.Fatalf("surplus = %v, want positive", first.Surplus)
+	}
+	if first.UnallocatedSurplus != first.Surplus {
+		t.Fatalf("unallocated = %v, want the whole surplus %v with no destination", first.UnallocatedSurplus, first.Surplus)
+	}
+	if got := first.Spouses[0].UnallocatedSurplus; got != first.Surplus {
+		t.Fatalf("Alex unallocated = %v, want %v", got, first.Surplus)
+	}
+	if want := RoundCents(500000 * 1.05); first.EndTotal != want {
+		t.Fatalf("end total = %v, want only the RRSP growth %v", first.EndTotal, want)
+	}
+}
+
+// TestRun_RetirementYearProratesCPPContributions covers the mid-year
+// retirement approximation: the retirement year's contribution is computed on
+// the half-year income with the basic exemption prorated to match.
+func TestRun_RetirementYearProratesCPPContributions(t *testing.T) {
+	results := mustRun(t, `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1966, retirement_age: 60, employment_income: 120000}
+  - {name: Sam, birth_year: 1966, retirement_age: 65}
+accounts:
+  - {name: Savings, type: non_registered, owner: Alex, balance: 100000}
+spending: {target_today_dollars: 40000, mode: flat}
+assumptions: {portfolio_return: 0.05, inflation: 0.021, wage_growth: 0.031}
+`, 2026)
+	first := results[0]
+	if got := first.EmploymentIncome; got != 60000 {
+		t.Fatalf("employment income = %v, want the half-year 60000", got)
+	}
+	want := RoundCents(58250 * 0.0595)
+	if math.Abs(first.CPPContributions-want) > 0.005 {
+		t.Fatalf("CPP contributions = %v, want %v (half-year income, prorated exemption)", first.CPPContributions, want)
+	}
+}
+
+// TestRun_CPPContributionsPrecedeTheWithdrawalSolve covers the cash-flow
+// ordering: payroll contributions come off earnings before the solver decides
+// whether the portfolio needs to top up the target. Here earnings would cover
+// the target without the withholding, but the contribution opens a shortfall.
+func TestRun_CPPContributionsPrecedeTheWithdrawalSolve(t *testing.T) {
+	results := mustRun(t, `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1981, retirement_age: 60, employment_income: 30000}
+  - {name: Sam, birth_year: 1983, retirement_age: 62}
+accounts:
+  - {name: Savings, type: non_registered, owner: Alex, balance: 500000}
+spending: {target_today_dollars: 28000, mode: flat}
+assumptions: {portfolio_return: 0.055, inflation: 0.021}
+`, 2026)
+	first := results[0]
+	if first.CPPContributions <= 0 {
+		t.Fatalf("CPP contributions = %v, want withheld from the earnings", first.CPPContributions)
+	}
+	if first.Withdrawals <= 0 {
+		t.Fatalf("withdrawals = %v, want a top-up once the contribution is withheld", first.Withdrawals)
+	}
+	if first.Surplus != 0 {
+		t.Fatalf("surplus = %v, want 0 when the contribution opens a shortfall", first.Surplus)
+	}
+	if first.NetSpending != first.TargetNominal {
+		t.Fatalf("net spending = %v, want the funded target %v", first.NetSpending, first.TargetNominal)
 	}
 }
 

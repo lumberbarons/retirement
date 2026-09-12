@@ -139,8 +139,11 @@ func (r *Report) WriteCSV(w io.Writer) error {
 		"withdrawals_nominal", "withdrawals_real",
 		"gross_income_nominal", "gross_income_real",
 		"tax_nominal", "tax_real",
+		"cpp_contributions_nominal", "cpp_contributions_real",
 		"oas_recovery_nominal", "oas_recovery_real",
 		"net_spending_nominal", "net_spending_real",
+		"surplus_nominal", "surplus_real",
+		"unallocated_surplus_nominal", "unallocated_surplus_real",
 		"end_balance_nominal", "end_balance_real",
 	}
 	for _, name := range spouses {
@@ -170,8 +173,11 @@ func (r *Report) WriteCSV(w io.Writer) error {
 			cents(y.Withdrawals), cents(r.Real(y.Withdrawals, y.Year)),
 			cents(y.GrossIncome), cents(r.Real(y.GrossIncome, y.Year)),
 			cents(y.Tax), cents(r.Real(y.Tax, y.Year)),
+			cents(y.CPPContributions), cents(r.Real(y.CPPContributions, y.Year)),
 			cents(y.OASRecovery), cents(r.Real(y.OASRecovery, y.Year)),
 			cents(y.NetSpending), cents(r.Real(y.NetSpending, y.Year)),
+			cents(y.Surplus), cents(r.Real(y.Surplus, y.Year)),
+			cents(y.UnallocatedSurplus), cents(r.Real(y.UnallocatedSurplus, y.Year)),
 			cents(y.EndTotal), cents(r.Real(y.EndTotal, y.Year)),
 		}
 		for _, name := range spouses {
@@ -211,15 +217,18 @@ func (r *Report) WriteTable(w io.Writer) error {
 
 func (r *Report) writeHouseholdTable(w io.Writer) error {
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "year\tspend nominal\tspend today's\tincome nominal\tcpp nominal\toas nominal\toas recovery nominal\tgis nominal\ttax nominal\twithdrawals nominal\tend balance nominal\tend balance today's")
+	fmt.Fprintln(tw, "year\tspend nominal\tspend today's\tincome nominal\tcpp nominal\toas nominal\toas recovery nominal\tgis nominal\ttax nominal\tcpp contributions nominal\twithdrawals nominal\tsurplus nominal\tunallocated surplus nominal\tend balance nominal\tend balance today's")
 	for _, y := range r.Years {
-		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			y.Year,
 			cents(y.NetSpending), cents(r.Real(y.NetSpending, y.Year)),
 			cents(y.GrossIncome),
 			cents(y.CPP), cents(y.OAS), cents(y.OASRecovery), cents(y.GIS),
 			cents(y.Tax),
+			cents(y.CPPContributions),
 			cents(y.Withdrawals),
+			cents(y.Surplus),
+			cents(y.UnallocatedSurplus),
 			cents(y.EndTotal), cents(r.Real(y.EndTotal, y.Year)),
 		)
 	}

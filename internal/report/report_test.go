@@ -139,6 +139,38 @@ func TestWriteCSV_ShowsGovernmentBenefitsAndClawback(t *testing.T) {
 	}
 }
 
+// TestWriteCSV_ShowsCPPContributionsAndRetainedSurplus covers the working-year
+// cash flow: payroll contributions and any retained or unallocated surplus get
+// columns in both frames.
+func TestWriteCSV_ShowsCPPContributionsAndRetainedSurplus(t *testing.T) {
+	years := []projection.YearResult{
+		{Year: 2026, CPPContributions: 4646.45, Surplus: 20000, UnallocatedSurplus: 1500},
+	}
+	r := New(2026, 0.021, years)
+	row := csvYearRow(t, r, 2026)
+	for name, want := range map[string]float64{
+		"cpp_contributions_nominal":   4646.45,
+		"cpp_contributions_real":      4646.45,
+		"surplus_nominal":             20000,
+		"surplus_real":                20000,
+		"unallocated_surplus_nominal": 1500,
+		"unallocated_surplus_real":    1500,
+	} {
+		if got := columnFloat(t, row, name); math.Abs(got-want) > 0.01 {
+			t.Fatalf("column %s = %v, want ~%v", name, got, want)
+		}
+	}
+	var table strings.Builder
+	if err := r.WriteTable(&table); err != nil {
+		t.Fatalf("WriteTable: %v", err)
+	}
+	for _, want := range []string{"cpp contributions nominal", "surplus nominal", "unallocated surplus nominal"} {
+		if !strings.Contains(table.String(), want) {
+			t.Fatalf("table missing %q:\n%s", want, table.String())
+		}
+	}
+}
+
 func TestSummary_ReadsTerminalRealWealthAgainstZeroEstateTarget(t *testing.T) {
 	r := New(2026, 0.021, testYears())
 	s := r.Summary()

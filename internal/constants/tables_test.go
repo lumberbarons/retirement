@@ -205,6 +205,26 @@ func TestCPP2026(t *testing.T) {
 	}
 }
 
+func TestCPPContributionRates2026(t *testing.T) {
+	cases := []struct {
+		name string
+		s    Scalar
+		want float64
+	}{
+		{"employee rate to YMPE", CPPContributionRate, 0.0595},
+		{"CPP2 rate to YAMPE", CPP2ContributionRate, 0.04},
+		{"creditable base rate", CPPBaseContributionRate, 0.0495},
+	}
+	for _, tc := range cases {
+		if got := mustScalarFor(t, tc.s, 2026, testFwd); got != tc.want {
+			t.Fatalf("%s = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+	if ybe := mustScalarFor(t, YBE, 2026, testFwd); ybe != 3500 {
+		t.Fatalf("YBE = %v, want 3500", ybe)
+	}
+}
+
 func TestFPCanada2026(t *testing.T) {
 	f, _, err := FPCanada.For(2026)
 	if err != nil {

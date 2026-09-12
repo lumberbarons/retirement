@@ -268,6 +268,30 @@ var YBE = Scalar{
 	Rows:         map[int]float64{2026: 3500},
 }
 
+var CPPContributionRate = Scalar{
+	Desc:         "employee CPP contribution rate to the YMPE (base plus first additional)",
+	Basis:        BasisFixed,
+	Source:       "ESDC 2026 rate card",
+	LastVerified: "2026-09",
+	Rows:         map[int]float64{2026: 0.0595},
+}
+
+var CPP2ContributionRate = Scalar{
+	Desc:         "employee CPP2 contribution rate on earnings between the YMPE and YAMPE",
+	Basis:        BasisFixed,
+	Source:       "ESDC 2026 rate card",
+	LastVerified: "2026-09",
+	Rows:         map[int]float64{2026: 0.04},
+}
+
+var CPPBaseContributionRate = Scalar{
+	Desc:         "creditable portion of the employee CPP contribution (base rate, frozen since 2019)",
+	Basis:        BasisFixed,
+	Source:       "Income Tax Act s.118.7(1); CRA T4032-ON",
+	LastVerified: "2026-09",
+	Rows:         map[int]float64{2026: 0.0495},
+}
+
 var CPPDeathBenefit = Scalar{
 	Desc:         "CPP death benefit lump sum",
 	Basis:        BasisFixed,
