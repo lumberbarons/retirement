@@ -1,7 +1,7 @@
 ---
 id: ADR-0004
 title: Use float64 for money, rounded to cents at boundaries
-status: proposed
+status: accepted
 date: 2026-09-09
 deciders: [lumberbarons]
 supersedes: []
