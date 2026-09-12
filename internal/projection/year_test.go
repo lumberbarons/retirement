@@ -2,16 +2,18 @@ package projection
 
 import (
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/lumberbarons/retirement/internal/config"
 	"github.com/lumberbarons/retirement/internal/constants"
+	"github.com/lumberbarons/retirement/internal/tax"
 )
 
 const baseHousehold = `base_year: 2026
 spouses:
-  - {name: Alex, birth_year: 1981, retirement_age: 60}
-  - {name: Sam, birth_year: 1983, retirement_age: 62}
+  - {name: Alex, birth_year: 1981, retirement_age: 60, employment_income: 150000}
+  - {name: Sam, birth_year: 1983, retirement_age: 62, employment_income: 90000}
 accounts:
   - {name: Alex TFSA, type: tfsa, owner: Alex, balance: 100000}
   - {name: Alex RRSP, type: rrsp, owner: Alex, balance: 450000}
@@ -72,27 +74,42 @@ func TestRun_HorizonRunsToSecondDeath(t *testing.T) {
 	}
 }
 
-func TestRun_PreRetirementYearAppliesMandatoryIncomeOnly(t *testing.T) {
+func TestRun_WorkingYearFundsTargetFromEmploymentIncome(t *testing.T) {
 	results := mustRun(t, baseHousehold, 2026)
 	first := results[0]
-	if first.TargetNominal != 0 {
-		t.Fatalf("2026 target = %v, want 0 (retirement starts 2041)", first.TargetNominal)
+	if first.TargetNominal != 80000 {
+		t.Fatalf("2026 target = %v, want 80000 (the target applies before retirement)", first.TargetNominal)
+	}
+	if first.EmploymentIncome != 240000 {
+		t.Fatalf("2026 employment income = %v, want 240000", first.EmploymentIncome)
 	}
 	if first.Withdrawals != 0 {
-		t.Fatalf("2026 discretionary withdrawals = %v, want 0", first.Withdrawals)
+		t.Fatalf("2026 discretionary withdrawals = %v, want 0 (earnings cover the target)", first.Withdrawals)
+	}
+	if first.NetSpending != first.TargetNominal {
+		t.Fatalf("2026 net spending = %v, want the target %v", first.NetSpending, first.TargetNominal)
+	}
+	if first.Surplus <= 0 {
+		t.Fatalf("2026 surplus = %v, want positive after-tax earnings above the target", first.Surplus)
 	}
 	wantMinimum := RoundCents(50000 * (1.0 / 48.0))
 	if first.MandatoryIncome != wantMinimum {
 		t.Fatalf("2026 mandatory = %v, want Sam's RRIF minimum %v (age at Jan 1 is 42)", first.MandatoryIncome, wantMinimum)
 	}
-	if first.NetSpending != wantMinimum {
-		t.Fatalf("2026 net spending = %v, want %v", first.NetSpending, wantMinimum)
-	}
 	if first.BeginTotal != 800000 {
 		t.Fatalf("2026 begin total = %v, want 800000", first.BeginTotal)
 	}
+	// The after-tax surplus lands in the non-registered account instead of
+	// disappearing, so the household's ending wealth keeps it.
+	taxable := accountYear(t, first, "Joint taxable")
+	if want := RoundCents(200000*1.05) + first.Surplus; taxable.End != want {
+		t.Fatalf("Joint taxable end = %v, want %v (grown balance plus retained surplus)", taxable.End, want)
+	}
+	if want := RoundCents(first.EmploymentIncome + first.MandatoryIncome - first.Tax - first.TargetNominal); first.Surplus != want {
+		t.Fatalf("2026 surplus = %v, want after-tax earnings above target %v", first.Surplus, want)
+	}
 	wantEnd := RoundCents(100000*1.05) + RoundCents(450000*1.05) +
-		RoundCents(50000*1.05-wantMinimum) + RoundCents(200000*1.05)
+		RoundCents(50000*1.05-wantMinimum) + taxable.End
 	if first.EndTotal != wantEnd {
 		t.Fatalf("2026 end total = %v, want %v", first.EndTotal, wantEnd)
 	}
@@ -113,21 +130,142 @@ func TestRun_Jan1SnapshotEqualsPriorYearEnd(t *testing.T) {
 	}
 }
 
-func TestRun_FirstRetirementYearIsProRated(t *testing.T) {
+func TestRun_RetirementYearProratesEmploymentIncome(t *testing.T) {
 	results := mustRun(t, baseHousehold, 2026)
-	retirement := results[2041-2026]
-	if retirement.TargetNominal != RoundCents(0.5*80000*math.Pow(1.021, 15)) {
-		t.Fatalf("2041 target = %v, want half of %v", retirement.TargetNominal, RoundCents(80000*math.Pow(1.021, 15)))
+	wage := 1.031
+	year2041 := results[2041-2026]
+	want2041 := RoundCents(0.5*150000*math.Pow(wage, 15)) + RoundCents(90000*math.Pow(wage, 15))
+	if math.Abs(year2041.EmploymentIncome-want2041) > 0.005 {
+		t.Fatalf("2041 employment income = %v, want %v (Alex's half year plus Sam's full year)", year2041.EmploymentIncome, want2041)
 	}
-	if retirement.NetSpending != retirement.TargetNominal {
-		t.Fatalf("2041 net spending = %v, want funded target %v", retirement.NetSpending, retirement.TargetNominal)
+	if want := RoundCents(80000 * math.Pow(1.021, 15)); year2041.TargetNominal != want {
+		t.Fatalf("2041 target = %v, want the full-year %v (spending does not start at retirement)", year2041.TargetNominal, want)
 	}
-	if results[2040-2026].TargetNominal != 0 {
-		t.Fatalf("2040 target = %v, want 0", results[2040-2026].TargetNominal)
+	if want := RoundCents(90000 * math.Pow(wage, 16)); math.Abs(results[2042-2026].EmploymentIncome-want) > 0.005 {
+		t.Fatalf("2042 employment income = %v, want only Sam's %v", results[2042-2026].EmploymentIncome, want)
 	}
-	full := results[2042-2026]
-	if full.TargetNominal != RoundCents(80000*math.Pow(1.021, 16)) {
-		t.Fatalf("2042 target = %v, want full-year %v", full.TargetNominal, RoundCents(80000*math.Pow(1.021, 16)))
+	if want := RoundCents(0.5 * 90000 * math.Pow(wage, 19)); math.Abs(results[2045-2026].EmploymentIncome-want) > 0.005 {
+		t.Fatalf("2045 employment income = %v, want Sam's half year %v", results[2045-2026].EmploymentIncome, want)
+	}
+	if results[2046-2026].EmploymentIncome != 0 {
+		t.Fatalf("2046 employment income = %v, want 0 once both spouses are retired", results[2046-2026].EmploymentIncome)
+	}
+}
+
+func TestRun_EmploymentIncomeGrowsWithWageGrowth(t *testing.T) {
+	yamlText := `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1981, retirement_age: 60, employment_income: 100000}
+  - {name: Sam, birth_year: 1983, retirement_age: 62}
+accounts:
+  - {name: Savings, type: non_registered, owner: Alex, balance: 1000000}
+spending: {target_today_dollars: 50000, mode: flat}
+assumptions: {portfolio_return: 0.05, inflation: 0.021, wage_growth: 0.04}
+`
+	results := mustRun(t, yamlText, 2026)
+	if results[0].EmploymentIncome != 100000 {
+		t.Fatalf("2026 employment income = %v, want 100000", results[0].EmploymentIncome)
+	}
+	if want := RoundCents(100000 * math.Pow(1.04, 10)); results[10].EmploymentIncome != want {
+		t.Fatalf("2036 employment income = %v, want %v (4%% wage growth)", results[10].EmploymentIncome, want)
+	}
+}
+
+func TestRun_EarningsFundTargetBeforeWithdrawals(t *testing.T) {
+	yamlText := `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1981, retirement_age: 60, employment_income: 30000}
+  - {name: Sam, birth_year: 1983, retirement_age: 62}
+accounts:
+  - {name: Savings, type: non_registered, owner: Alex, balance: 500000}
+spending: {target_today_dollars: 60000, mode: flat}
+assumptions: {portfolio_return: 0.055, inflation: 0.021}
+`
+	results := mustRun(t, yamlText, 2026)
+	first := results[0]
+	if first.EmploymentIncome != 30000 {
+		t.Fatalf("2026 employment income = %v, want 30000", first.EmploymentIncome)
+	}
+	if first.NetSpending != first.TargetNominal {
+		t.Fatalf("2026 net spending = %v, want the target %v", first.NetSpending, first.TargetNominal)
+	}
+	if first.Withdrawals <= 0 {
+		t.Fatalf("2026 withdrawals = %v, want the earnings shortfall drawn from the portfolio", first.Withdrawals)
+	}
+	if first.Surplus != 0 {
+		t.Fatalf("2026 surplus = %v, want 0 when earnings fall short of the target", first.Surplus)
+	}
+}
+
+func TestStepEmploymentIncome_AttributesToTheEarner(t *testing.T) {
+	h := mustHousehold(t, `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1981, retirement_age: 60, employment_income: 100000}
+  - {name: Sam, birth_year: 1983, retirement_age: 62}
+accounts:
+  - {name: Savings, type: non_registered, owner: Alex, balance: 1000}
+spending: {target_today_dollars: 50000}
+`)
+	s := NewState(h, 2026)
+	incomes := make([]tax.Income, len(s.People))
+	var res YearResult
+	s.stepEmploymentIncome(h, incomes, &res)
+	if incomes[0].Employment != 100000 {
+		t.Fatalf("Alex employment = %v, want 100000", incomes[0].Employment)
+	}
+	if incomes[1].Employment != 0 {
+		t.Fatalf("Sam employment = %v, want 0", incomes[1].Employment)
+	}
+	if res.EmploymentIncome != 100000 {
+		t.Fatalf("year employment income = %v, want 100000", res.EmploymentIncome)
+	}
+}
+
+func TestRun_EmploymentIncomeEntersTaxableIncome(t *testing.T) {
+	const noEarnings = `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1981, retirement_age: 65}
+  - {name: Sam, birth_year: 1983, retirement_age: 65}
+accounts:
+  - {name: Savings, type: non_registered, owner: Alex, balance: 2000000}
+spending: {target_today_dollars: 40000, mode: flat}
+assumptions: {portfolio_return: 0.05, inflation: 0.021}
+`
+	withEarnings := mustRun(t, strings.Replace(noEarnings,
+		"retirement_age: 65}", "retirement_age: 65, employment_income: 80000}", 1), 2026)
+	without := mustRun(t, noEarnings, 2026)
+	if withEarnings[0].TaxableIncome <= without[0].TaxableIncome {
+		t.Fatalf("taxable income with earnings = %v, want above %v without",
+			withEarnings[0].TaxableIncome, without[0].TaxableIncome)
+	}
+	if withEarnings[0].Tax <= without[0].Tax {
+		t.Fatalf("tax with earnings = %v, want above %v without", withEarnings[0].Tax, without[0].Tax)
+	}
+}
+
+func TestStepYear_RetainedSurplusRaisesNonRegisteredACB(t *testing.T) {
+	h := mustHousehold(t, `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1981, retirement_age: 60, employment_income: 100000}
+  - {name: Sam, birth_year: 1983, retirement_age: 62}
+accounts:
+  - {name: Savings, type: non_registered, owner: Alex, balance: 100000, acb: 80000}
+spending: {target_today_dollars: 40000, mode: flat}
+assumptions: {portfolio_return: 0.05, inflation: 0.021}
+`)
+	s := NewState(h, 2026)
+	res, err := s.stepYear(h)
+	if err != nil {
+		t.Fatalf("stepYear: %v", err)
+	}
+	if res.Surplus <= 0 {
+		t.Fatalf("surplus = %v, want positive", res.Surplus)
+	}
+	if want := 80000 + res.Surplus; s.Accounts[0].ACB != want {
+		t.Fatalf("ACB = %v, want opening ACB plus retained surplus %v", s.Accounts[0].ACB, want)
+	}
+	if want := RoundCents(100000*1.05) + res.Surplus; res.EndTotal != want {
+		t.Fatalf("end total = %v, want %v (the surplus stays in the household)", res.EndTotal, want)
 	}
 }
 
@@ -167,7 +305,7 @@ spouses:
   - {name: Sam, birth_year: 1983, retirement_age: 62, death_age: 90}
 accounts:
   - {name: Alex RRIF, type: rrif, owner: Alex, balance: 50000, younger_spouse_election: true}
-  - {name: Sam non-registered, type: non_registered, owner: Sam, balance: 1000000}
+  - {name: Sam non-registered, type: non_registered, owner: Sam, balance: 5000000}
 spending: {target_today_dollars: 60000}
 assumptions: {portfolio_return: 0.05, inflation: 0.021}
 `

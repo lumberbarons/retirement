@@ -16,18 +16,20 @@ type AccountYear struct {
 }
 
 type YearResult struct {
-	Year            int
-	BeginTotal      float64
-	EndTotal        float64
-	MandatoryIncome float64
-	Withdrawals     float64
-	GrossIncome     float64
-	TaxableIncome   float64
-	Tax             float64
-	NetSpending     float64
-	TargetNominal   float64
-	Accounts        []AccountYear
-	Deaths          []string
+	Year             int
+	BeginTotal       float64
+	EndTotal         float64
+	MandatoryIncome  float64
+	EmploymentIncome float64
+	Surplus          float64
+	Withdrawals      float64
+	GrossIncome      float64
+	TaxableIncome    float64
+	Tax              float64
+	NetSpending      float64
+	TargetNominal    float64
+	Accounts         []AccountYear
+	Deaths           []string
 }
 
 func Run(h *config.Household, startYear int) ([]YearResult, error) {
@@ -54,6 +56,7 @@ func (s *State) stepYear(h *config.Household) (YearResult, error) {
 	s.stepSnapshot(&res)
 	s.stepReturns(h, &res)
 	s.stepMandatoryIncome(incomes, &res)
+	s.stepEmploymentIncome(h, incomes, &res)
 	if err := s.stepDiscretionaryWithdrawals(h, incomes, &res); err != nil {
 		return YearResult{}, err
 	}
@@ -106,6 +109,33 @@ func (s *State) stepMandatoryIncome(incomes []tax.Income, res *YearResult) {
 	}
 }
 
+// stepEmploymentIncome posts each spouse's earned income for the year. The
+// configured amount is in base-year dollars and grows with the wage-growth
+// assumption: a full year through the year before retirement, half a year in
+// the retirement year, and nothing after. Income also stops with the spouse.
+func (s *State) stepEmploymentIncome(h *config.Household, incomes []tax.Income, res *YearResult) {
+	forward := constants.Forward{CPI: h.Assumptions.Inflation, Wage: h.Assumptions.WageGrowth}
+	for i := range h.Spouses {
+		sp := &h.Spouses[i]
+		if sp.EmploymentIncome <= 0 {
+			continue
+		}
+		p := &s.People[i]
+		if !p.Alive || s.Year > p.RetirementYear() {
+			continue
+		}
+		amount := constants.ForwardIndex(sp.EmploymentIncome, constants.BasisAverageWage,
+			h.BaseYear, s.Year, forward)
+		if s.Year == p.RetirementYear() {
+			amount *= midYearFraction
+		}
+		amount = RoundCents(amount)
+		incomes[i].Employment += amount
+		res.EmploymentIncome += amount
+	}
+	res.EmploymentIncome = RoundCents(res.EmploymentIncome)
+}
+
 func (s *State) stepDiscretionaryWithdrawals(h *config.Household, incomes []tax.Income, res *YearResult) error {
 	res.TargetNominal = s.nominalSpending(h)
 	var solveErr error
@@ -116,7 +146,7 @@ func (s *State) stepDiscretionaryWithdrawals(h *config.Household, incomes []tax.
 			solveErr = err
 			return 0
 		}
-		return res.MandatoryIncome + withdrawal - result.Total
+		return res.MandatoryIncome + res.EmploymentIncome + withdrawal - result.Total
 	}
 	withdrawal := RoundCents(SolveGross(res.TargetNominal, s.withdrawalCapacity(), net))
 	if solveErr != nil {
@@ -126,7 +156,7 @@ func (s *State) stepDiscretionaryWithdrawals(h *config.Household, incomes []tax.
 		s.applyWithdrawals(s.allocate(withdrawal), incomes, res)
 	}
 	res.Withdrawals = RoundCents(res.Withdrawals)
-	res.GrossIncome = RoundCents(res.MandatoryIncome + res.Withdrawals)
+	res.GrossIncome = RoundCents(res.MandatoryIncome + res.EmploymentIncome + res.Withdrawals)
 	return nil
 }
 
@@ -141,8 +171,33 @@ func (s *State) stepTaxes(h *config.Household, incomes []tax.Income, res *YearRe
 	}
 	res.TaxableIncome = RoundCents(taxable)
 	res.Tax = RoundCents(result.Total)
-	res.NetSpending = RoundCents(res.GrossIncome - res.Tax)
+
+	// The year's after-tax cash funds the spending target. Anything above the
+	// target — earnings not spent — is surplus, retained in the household
+	// rather than dropped; only a cash shortfall reports spending below it.
+	netCash := RoundCents(res.GrossIncome - res.Tax)
+	if netCash < 0 {
+		netCash = 0
+	}
+	res.NetSpending = math.Min(netCash, res.TargetNominal)
+	if surplus := RoundCents(netCash - res.NetSpending); surplus > 0 {
+		res.Surplus = surplus
+		s.retainSurplus(surplus)
+	}
 	return nil
+}
+
+// retainSurplus deposits the year's after-tax surplus into the first
+// non_registered account, raising ACB by the deposit so the retained cash is
+// not taxed again as a capital gain when it is later withdrawn.
+func (s *State) retainSurplus(surplus float64) {
+	for _, a := range s.Accounts {
+		if a.Type == config.AccountNonRegistered {
+			a.Balance += surplus
+			a.ACB += surplus
+			return
+		}
+	}
 }
 
 func (s *State) stepRollForward(res *YearResult) {

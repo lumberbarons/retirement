@@ -137,7 +137,29 @@ func Validate(h *Household) error {
 	if err := validateAccounts(h); err != nil {
 		return err
 	}
-	return validatePlan(h)
+	if err := validatePlan(h); err != nil {
+		return err
+	}
+	return validateEmploymentSavings(h)
+}
+
+// validateEmploymentSavings requires a non_registered account whenever a
+// spouse declares employment income: pre-retirement surplus is retained
+// there, and without one the engine would have nowhere to deposit it.
+func validateEmploymentSavings(h *Household) error {
+	for i := range h.Accounts {
+		if h.Accounts[i].Type == AccountNonRegistered {
+			return nil
+		}
+	}
+	for i := range h.Spouses {
+		s := &h.Spouses[i]
+		if s.EmploymentIncome > 0 && s.BirthYear+s.RetirementAge >= h.BaseYear {
+			return fieldError(fmt.Sprintf("spouses[%d].employment_income", i),
+				"requires a non_registered account to hold surplus savings")
+		}
+	}
+	return nil
 }
 
 func validateSpouses(h *Household) error {
@@ -172,6 +194,9 @@ func validateSpouses(h *Household) error {
 		}
 		if s.RetirementAge > s.DeathAge {
 			return fieldError(p+".retirement_age", "%d is after death age %d", s.RetirementAge, s.DeathAge)
+		}
+		if s.EmploymentIncome < 0 {
+			return fieldError(p+".employment_income", "must not be negative, got %v", s.EmploymentIncome)
 		}
 		if s.CPP.MonthlyAt65 < 0 {
 			return fieldError(p+".cpp.monthly_at_65", "must not be negative, got %v", s.CPP.MonthlyAt65)

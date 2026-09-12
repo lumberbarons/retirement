@@ -10,14 +10,17 @@ type Household struct {
 }
 
 type Spouse struct {
-	Name          string             `yaml:"name"`
-	BirthYear     int                `yaml:"birth_year"`
-	DeathAge      int                `yaml:"death_age"`
-	RetirementAge int                `yaml:"retirement_age"`
-	CPP           CPP                `yaml:"cpp"`
-	OAS           OAS                `yaml:"oas"`
-	Pension       *DBPension         `yaml:"pension"`
-	PensionSplit  []PensionSplitYear `yaml:"pension_split"`
+	Name          string `yaml:"name"`
+	BirthYear     int    `yaml:"birth_year"`
+	DeathAge      int    `yaml:"death_age"`
+	RetirementAge int    `yaml:"retirement_age"`
+	// EmploymentIncome is earned income in base-year dollars, indexed to each
+	// working year at the wage-growth assumption until retirement.
+	EmploymentIncome float64            `yaml:"employment_income"`
+	CPP              CPP                `yaml:"cpp"`
+	OAS              OAS                `yaml:"oas"`
+	Pension          *DBPension         `yaml:"pension"`
+	PensionSplit     []PensionSplitYear `yaml:"pension_split"`
 }
 
 // PensionSplitYear is one year's T1032 election: the fraction of the
