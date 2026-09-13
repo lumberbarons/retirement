@@ -6,9 +6,9 @@ import (
 	"github.com/lumberbarons/retirement/internal/config"
 )
 
-// midYearFraction pro-rates spending in the first retirement year. The engine
-// models whole years, so retirement is approximated as starting mid-year
-// regardless of the actual month.
+// midYearFraction pro-rates employment income in the retirement year. The
+// engine models whole years, so retirement is approximated as starting
+// mid-year regardless of the actual month.
 const midYearFraction = 0.5
 
 func RoundCents(v float64) float64 {

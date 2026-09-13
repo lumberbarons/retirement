@@ -156,6 +156,32 @@ func TestCompute_EmploymentAmountCapsAtTableValue(t *testing.T) {
 	almostEqual(t, delta, (5000-1501)*0.14)
 }
 
+// TestCompute_CPPContributionsGetCreditAndDeduction covers the governing
+// spec's split treatment of employee CPP contributions: the enhanced portion
+// is deducted from taxable income and the base portion is worth a
+// non-refundable credit at the lowest federal and Ontario rates.
+func TestCompute_CPPContributionsGetCreditAndDeduction(t *testing.T) {
+	compute := func(in Income) Result {
+		t.Helper()
+		res, err := Compute(Household{Year: 2026, Spouses: []Spouse{
+			{Name: "A", Age: 50, Income: in},
+			{Name: "B", Age: 50},
+		}})
+		if err != nil {
+			t.Fatalf("Compute: %v", err)
+		}
+		return res
+	}
+	without := compute(Income{Employment: 50000})
+	with := compute(Income{
+		Employment:           50000,
+		CPPContributions:     2766.75,
+		CPPBaseContributions: 2301.75,
+	})
+	almostEqual(t, with.Spouses[0].TaxableIncome, without.Spouses[0].TaxableIncome-465)
+	almostEqual(t, without.Total-with.Total, 2766.75*(0.14+0.0505))
+}
+
 func TestCompute_PensionAmountFollowsIncomeTypeAndAge(t *testing.T) {
 	taxOf := func(age int, in Income) float64 {
 		t.Helper()
