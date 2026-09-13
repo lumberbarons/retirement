@@ -6,6 +6,7 @@ import (
 
 	"github.com/lumberbarons/retirement/internal/config"
 	"github.com/lumberbarons/retirement/internal/constants"
+	"github.com/lumberbarons/retirement/internal/tax"
 )
 
 const baseHousehold = `base_year: 2026
@@ -502,5 +503,76 @@ func TestApplyCPPSharing_OnlyWhileBothReceive(t *testing.T) {
 	}
 	if cpp[0] != 12000 || cpp[1] != 0 {
 		t.Fatalf("pensions = %v/%v, want no sharing after a death", cpp[0], cpp[1])
+	}
+}
+
+// TestAddWithdrawalIncome_UnderwaterSaleRealizesCapitalLoss covers the
+// Done-when item that a partial underwater sale realizes proceeds minus the
+// proportional ACB as a capital loss.
+func TestAddWithdrawalIncome_UnderwaterSaleRealizesCapitalLoss(t *testing.T) {
+	s := &State{
+		People: []Person{{Name: "Alex"}},
+		Accounts: []*AccountState{{
+			Name: "Taxable", Type: config.AccountNonRegistered, Owner: "Alex",
+			Balance: 100000, ACB: 150000,
+		}},
+	}
+	incomes := []tax.Income{{}}
+	s.addWithdrawalIncome(incomes, 0, 40000)
+	wantLoss := 40000*(150000.0/100000) - 40000
+	if math.Abs(incomes[0].CapitalLosses-wantLoss) > 0.005 {
+		t.Fatalf("capital losses = %v, want %v (proceeds minus proportional ACB)", incomes[0].CapitalLosses, wantLoss)
+	}
+	if incomes[0].CapitalGains != 0 {
+		t.Fatalf("capital gains = %v, want 0 for an underwater sale", incomes[0].CapitalGains)
+	}
+}
+
+// TestAddWithdrawalIncome_ProfitableSaleRealizesCapitalGain is the positive
+// control for the underwater case: the same proportional formula must keep
+// recording a gain when ACB is below the balance.
+func TestAddWithdrawalIncome_ProfitableSaleRealizesCapitalGain(t *testing.T) {
+	s := &State{
+		People: []Person{{Name: "Alex"}},
+		Accounts: []*AccountState{{
+			Name: "Taxable", Type: config.AccountNonRegistered, Owner: "Alex",
+			Balance: 200000, ACB: 150000,
+		}},
+	}
+	incomes := []tax.Income{{}}
+	s.addWithdrawalIncome(incomes, 0, 40000)
+	if want := 40000 - 40000*(150000.0/200000); math.Abs(incomes[0].CapitalGains-want) > 0.005 {
+		t.Fatalf("capital gains = %v, want %v", incomes[0].CapitalGains, want)
+	}
+	if incomes[0].CapitalLosses != 0 {
+		t.Fatalf("capital losses = %v, want 0 for a profitable sale", incomes[0].CapitalLosses)
+	}
+}
+
+// TestRun_UnderwaterLossDoesNotReduceOrdinaryIncome wires the two halves
+// together: a fully drained underwater non-registered account realizes a
+// capital loss, and the year's taxable income must still equal the RRIF
+// income it was sold alongside.
+func TestRun_UnderwaterLossDoesNotReduceOrdinaryIncome(t *testing.T) {
+	const yamlText = `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1981, retirement_age: 40}
+  - {name: Sam, birth_year: 1983, retirement_age: 40}
+accounts:
+  - {name: Alex RRIF, type: rrif, owner: Alex, balance: 200000}
+  - {name: Underwater, type: non_registered, owner: Alex, balance: 100000, acb: 150000}
+spending: {target_today_dollars: 200000, mode: flat}
+assumptions: {portfolio_return: 0.05, inflation: 0.021}
+`
+	first := mustRun(t, yamlText, 2026)[0]
+	underwater := accountYear(t, first, "Underwater")
+	if underwater.Withdrawal != underwater.Begin*(1+0.05) {
+		t.Fatalf("underwater withdrawal = %v, want the whole balance %v (first tier drains first)",
+			underwater.Withdrawal, underwater.Begin*(1+0.05))
+	}
+	ordinary := first.MandatoryIncome + (first.Withdrawals - underwater.Withdrawal)
+	if diff := math.Abs(first.TaxableIncome - ordinary); diff > 1 {
+		t.Fatalf("taxable income = %v, want ordinary income %v (capital loss must not offset it, off by %v)",
+			first.TaxableIncome, ordinary, diff)
 	}
 }

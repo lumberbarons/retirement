@@ -108,8 +108,10 @@ func inTier(t config.AccountType, tier []config.AccountType) bool {
 
 // applyWithdrawals records the allocation, adds each withdrawal's taxable
 // portion to the year's income, and removes it from balances. A
-// non-registered withdrawal reduces ACB proportionally; the sub-cent
-// floating-point residue a proportional split can leave behind is clamped.
+// non-registered withdrawal consumes ACB in proportion to the units sold —
+// even when the position is underwater and that ACB exceeds the proceeds —
+// and the sub-cent floating-point residue a proportional split can leave
+// behind is clamped.
 func (s *State) applyWithdrawals(alloc []float64, incomes []tax.Income, res *YearResult) {
 	for i, w := range alloc {
 		if w <= 0 {
@@ -118,11 +120,7 @@ func (s *State) applyWithdrawals(alloc []float64, incomes []tax.Income, res *Yea
 		a := s.Accounts[i]
 		s.addWithdrawalIncome(incomes, i, w)
 		if a.Type == config.AccountNonRegistered && a.Balance > 0 {
-			ratio := a.ACB / a.Balance
-			if ratio > 1 {
-				ratio = 1
-			}
-			a.ACB = math.Max(0, a.ACB-w*ratio)
+			a.ACB = math.Max(0, a.ACB-w*(a.ACB/a.Balance))
 		}
 		a.Balance = math.Max(0, a.Balance-w)
 		res.Accounts[i].Withdrawal += w

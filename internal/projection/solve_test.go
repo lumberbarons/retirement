@@ -3,6 +3,9 @@ package projection
 import (
 	"math"
 	"testing"
+
+	"github.com/lumberbarons/retirement/internal/config"
+	"github.com/lumberbarons/retirement/internal/tax"
 )
 
 func TestSolveGross_NetsTargetWithinOneDollar(t *testing.T) {
@@ -125,5 +128,58 @@ assumptions: {portfolio_return: 0.05, inflation: 0.021}
 	}
 	if rrsp := accountYear(t, first, "Alex RRSP"); rrsp.Withdrawal >= 20000 {
 		t.Fatalf("RRSP withdrawal = %v, want less than the full 20000 target", rrsp.Withdrawal)
+	}
+}
+
+// TestApplyWithdrawals_UnderwaterSaleReducesACBProRata covers the Done-when
+// item that the remaining ACB is the opening ACB times the unsold fraction,
+// even when the disposed ACB exceeds the proceeds.
+func TestApplyWithdrawals_UnderwaterSaleReducesACBProRata(t *testing.T) {
+	s := &State{
+		People: []Person{{Name: "Alex"}},
+		Accounts: []*AccountState{{
+			Name: "Taxable", Type: config.AccountNonRegistered, Owner: "Alex",
+			Balance: 100000, ACB: 150000,
+		}},
+	}
+	incomes := []tax.Income{{}}
+	res := YearResult{Accounts: []AccountYear{{Name: "Taxable"}}}
+	s.applyWithdrawals([]float64{40000}, incomes, &res)
+
+	wantACB := 150000 * (1 - 40000.0/100000)
+	if math.Abs(s.Accounts[0].ACB-wantACB) > 0.005 {
+		t.Fatalf("remaining ACB = %v, want %v (opening ACB times unsold fraction)", s.Accounts[0].ACB, wantACB)
+	}
+	if s.Accounts[0].Balance != 60000 {
+		t.Fatalf("remaining balance = %v, want 60000", s.Accounts[0].Balance)
+	}
+	if incomes[0].CapitalLosses != 20000 {
+		t.Fatalf("capital losses = %v, want 20000 (the sale's proportional loss)", incomes[0].CapitalLosses)
+	}
+}
+
+// TestApplyWithdrawals_FullUnderwaterDispositionClearsACB covers the full
+// disposition end: selling every unit consumes all the ACB, not just the
+// proceeds' worth.
+func TestApplyWithdrawals_FullUnderwaterDispositionClearsACB(t *testing.T) {
+	s := &State{
+		People: []Person{{Name: "Alex"}},
+		Accounts: []*AccountState{{
+			Name: "Taxable", Type: config.AccountNonRegistered, Owner: "Alex",
+			Balance: 100000, ACB: 150000,
+		}},
+	}
+	incomes := []tax.Income{{}}
+	res := YearResult{Accounts: []AccountYear{{Name: "Taxable"}}}
+	s.applyWithdrawals([]float64{100000}, incomes, &res)
+
+	if math.Abs(s.Accounts[0].ACB) > 0.005 {
+		t.Fatalf("remaining ACB = %v, want 0 after a full disposition", s.Accounts[0].ACB)
+	}
+	if s.Accounts[0].Balance != 0 {
+		t.Fatalf("remaining balance = %v, want 0", s.Accounts[0].Balance)
+	}
+	if math.Abs(incomes[0].CapitalLosses-50000) > 0.005 {
+		t.Fatalf("capital losses = %v, want 50000", incomes[0].CapitalLosses)
 	}
 }

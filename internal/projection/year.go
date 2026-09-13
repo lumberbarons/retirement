@@ -348,8 +348,10 @@ func (s *State) trialIncomes(withdrawal float64, incomes []tax.Income) []tax.Inc
 
 // addWithdrawalIncome adds one account's withdrawal to its owner's income.
 // Registered withdrawals are fully taxable; a non-registered withdrawal
-// realizes the gain fraction (1 - ACB/balance) against ACB; TFSA withdrawals
-// are tax-free. It reads balances before the withdrawal is applied.
+// realizes the gain fraction (1 - ACB/balance) against ACB — a negative
+// fraction when ACB exceeds the balance realizes a capital loss — and TFSA
+// withdrawals are tax-free. It reads balances before the withdrawal is
+// applied.
 func (s *State) addWithdrawalIncome(incomes []tax.Income, accountIndex int, amount float64) {
 	if amount <= 0 {
 		return
@@ -363,7 +365,12 @@ func (s *State) addWithdrawalIncome(incomes []tax.Income, accountIndex int, amou
 		incomes[p].RRIFWithdrawals += amount
 	case config.AccountNonRegistered:
 		if a.Balance > 0 {
-			incomes[p].CapitalGains += amount * (1 - a.ACB/a.Balance)
+			realized := amount * (1 - a.ACB/a.Balance)
+			if realized >= 0 {
+				incomes[p].CapitalGains += realized
+			} else {
+				incomes[p].CapitalLosses += -realized
+			}
 		}
 	}
 }

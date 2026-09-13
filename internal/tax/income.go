@@ -15,6 +15,9 @@ type Income struct {
 	EligibleDividends    float64
 	NonEligibleDividends float64
 	CapitalGains         float64
+	// CapitalLosses is the year's realized capital losses before inclusion.
+	// Losses offset capital gains only; the engine models no carry rules.
+	CapitalLosses float64
 }
 
 // EligiblePension returns the income eligible for the pension income amount
@@ -30,14 +33,21 @@ func (in Income) EligiblePension(age int) float64 {
 
 // grossedUp returns total taxable income and the federal and Ontario dividend
 // tax credits. Eligible and non-eligible dividends carry their own gross-up
-// and credit rates; capital gains include at the year's inclusion rate.
+// and credit rates; capital gains include at the year's inclusion rate after
+// current-year capital losses offset them first. The engine models no loss
+// carry rules, so losses beyond the year's gains go unused rather than
+// reducing ordinary income.
 func (in Income) grossedUp(rates constants.IncomeYear) (taxable, fedDTC, onDTC float64) {
 	grossedEligible := in.EligibleDividends * (1 + rates.GrossUpEligible)
 	grossedNonEligible := in.NonEligibleDividends * (1 + rates.GrossUpNonEligible)
+	netCapitalGains := in.CapitalGains - in.CapitalLosses
+	if netCapitalGains < 0 {
+		netCapitalGains = 0
+	}
 	taxable = in.Employment + in.RRSPWithdrawals + in.RRIFWithdrawals +
 		in.DBPPension + in.CPP + in.OAS + in.Interest +
 		grossedEligible + grossedNonEligible +
-		in.CapitalGains*rates.CapGainsInclusion
+		netCapitalGains*rates.CapGainsInclusion
 	fedDTC = grossedEligible*rates.DTCFedEligible + grossedNonEligible*rates.DTCFedNonEligible
 	onDTC = grossedEligible*rates.DTCOnEligible + grossedNonEligible*rates.DTCOnNonEligible
 	return taxable, fedDTC, onDTC
