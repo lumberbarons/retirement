@@ -61,6 +61,29 @@ func TestIncome_CapitalGainsIncludeAtFiftyPercent(t *testing.T) {
 	}
 }
 
+func TestIncome_CapitalLossesDoNotOffsetOrdinaryIncome(t *testing.T) {
+	in := Income{
+		Employment:           10000,
+		RRSPWithdrawals:      20000,
+		RRIFWithdrawals:      30000,
+		DBPPension:           40000,
+		CPP:                  5000,
+		OAS:                  6000,
+		Interest:             7000,
+		EligibleDividends:    1000,
+		NonEligibleDividends: 2000,
+		CapitalLosses:        50000,
+	}
+	rates, _, err := constantsIncome(t)
+	if err != nil {
+		t.Fatalf("constants.Income.For: %v", err)
+	}
+	want := 10000.0 + 20000 + 30000 + 40000 + 5000 + 6000 + 7000 +
+		1000*(1+rates.GrossUpEligible) + 2000*(1+rates.GrossUpNonEligible)
+	taxable, _, _ := in.grossedUp(rates)
+	almostEqual(t, taxable, want)
+}
+
 // TestIncome_EnhancedCPPContributionDeductsFromTaxableIncome covers the split
 // treatment of employee CPP contributions: the portion above the creditable
 // base rate is deducted from income, while the base portion stays in the
@@ -73,6 +96,26 @@ func TestIncome_EnhancedCPPContributionDeductsFromTaxableIncome(t *testing.T) {
 	}
 	taxable, _, _ := in.grossedUp(rates)
 	almostEqual(t, taxable, 50000-465)
+}
+
+func TestIncome_CapitalLossesNetAgainstCapitalGains(t *testing.T) {
+	in := Income{CapitalGains: 10000, CapitalLosses: 4000}
+	rates, _, err := constantsIncome(t)
+	if err != nil {
+		t.Fatalf("constants.Income.For: %v", err)
+	}
+	taxable, _, _ := in.grossedUp(rates)
+	almostEqual(t, taxable, 0.5*(10000-4000))
+}
+
+func TestIncome_CapitalLossesBeyondGainsGetNoDeduction(t *testing.T) {
+	in := Income{CapitalGains: 10000, CapitalLosses: 25000, Employment: 30000}
+	rates, _, err := constantsIncome(t)
+	if err != nil {
+		t.Fatalf("constants.Income.For: %v", err)
+	}
+	taxable, _, _ := in.grossedUp(rates)
+	almostEqual(t, taxable, 30000)
 }
 
 func TestIncome_AllComponentsTaxable(t *testing.T) {
