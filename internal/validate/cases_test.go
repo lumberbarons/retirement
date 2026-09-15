@@ -15,6 +15,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/lumberbarons/retirement/internal/benefits"
 	"github.com/lumberbarons/retirement/internal/config"
 	"github.com/lumberbarons/retirement/internal/constants"
 	"github.com/lumberbarons/retirement/internal/projection"
@@ -58,10 +59,12 @@ func TestValidation_RRIFMinimums(t *testing.T) {
 	}
 }
 
-// TestValidation_OASFullClawbackCeilings covers §7: the OAS recovery tax
-// reclaims the full pension at the ESDC ceilings ($154,708 at 65–74, $160,647
-// at 75+). The table figures must reconcile with the threshold and the rate.
-func TestValidation_OASFullClawbackCeilings(t *testing.T) {
+// TestValidation_OASPublishedRecoveryRangeCeilings covers §7: the published
+// ESDC recovery-range ceilings ($154,708 at 65–74, $160,647 at 75+) reconcile
+// with twelve January payments. They are external reference figures for the
+// real July-to-June administration cycle, not the same-year model's
+// full-recovery points for its larger four-quarter pension.
+func TestValidation_OASPublishedRecoveryRangeCeilings(t *testing.T) {
 	row, _, err := constants.OAS.For(2026)
 	if err != nil {
 		t.Fatalf("constants.OAS.For: %v", err)
@@ -75,12 +78,37 @@ func TestValidation_OASFullClawbackCeilings(t *testing.T) {
 		monthly float64
 		ceiling float64
 	}{
-		{"65-74", row.Quarterly65to74[0], row.ClawbackCeiling65to74},
-		{"75+", row.Quarterly75Plus[0], row.ClawbackCeiling75Plus},
+		{"65-74", row.Quarterly65to74[0], row.PublishedClawbackCeiling65to74},
+		{"75+", row.Quarterly75Plus[0], row.PublishedClawbackCeiling75Plus},
 	}
 	for _, c := range cases {
 		recoveryAtCeiling := rate * (c.ceiling - row.ClawbackThreshold)
 		almostEqual(t, recoveryAtCeiling, 12*c.monthly)
+	}
+}
+
+// TestValidation_OASAnnualizedPensionFullRecovery covers §7: under the
+// documented same-year approximation, the actual annualized pension is fully
+// recovered at threshold + annual pension / 15%.
+func TestValidation_OASAnnualizedPensionFullRecovery(t *testing.T) {
+	cases := []struct {
+		name      string
+		birthYear int
+		income    float64
+	}{
+		{"65-74", 1961, 155319.60},
+		{"75+", 1951, 161319.40},
+	}
+	for _, c := range cases {
+		oas, err := benefits.OASAnnual(65, c.birthYear, 2026, constants.Forward{})
+		if err != nil {
+			t.Fatalf("%s OASAnnual: %v", c.name, err)
+		}
+		recovery, err := benefits.OASRecovery(oas, c.income, 2026, constants.Forward{})
+		if err != nil {
+			t.Fatalf("%s OASRecovery: %v", c.name, err)
+		}
+		almostEqual(t, oas-recovery, 0)
 	}
 }
 

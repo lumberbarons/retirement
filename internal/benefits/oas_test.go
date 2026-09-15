@@ -33,15 +33,14 @@ func TestOASFactor_DeferralTo70(t *testing.T) {
 }
 
 // TestOASAnnual_SumsTheFourQuarterlyRates covers the Done-when item that the
-// 2026 pension uses all four quarterly periods: the Jan-Mar rate is carried
-// through Q2 and the Jul-Sep rate through Q4, so the year is not twelve times
-// the January amount.
+// 2026 pension uses all four quarterly periods, so the year is not twelve
+// times the January amount.
 func TestOASAnnual_SumsTheFourQuarterlyRates(t *testing.T) {
 	got, err := OASAnnual(65, 1961, 2026, forward)
 	if err != nil {
 		t.Fatalf("OASAnnual: %v", err)
 	}
-	want := 3*742.31 + 3*742.31 + 3*751.97 + 3*751.97
+	want := 3*742.31 + 3*743.05 + 3*751.97 + 3*762.50
 	withinDollar(t, got, want)
 	if january := 12 * 742.31; math.Abs(got-january) <= 1 {
 		t.Fatalf("2026 OAS = %v, want the four-quarter total %v, not 12 x January %v", got, want, january)
@@ -60,7 +59,7 @@ func TestOASAnnual_FutureYearsApplyOneAnnualCPI(t *testing.T) {
 		}
 		return got
 	}
-	base := 3*742.31 + 3*742.31 + 3*751.97 + 3*751.97
+	base := 3*742.31 + 3*743.05 + 3*751.97 + 3*762.50
 
 	withinDollar(t, annual(2027), base*1.021)
 	withinDollar(t, annual(2036), base*math.Pow(1.021, 10))
@@ -82,8 +81,8 @@ func TestOASAnnual_StartYearAndAge75Treatment(t *testing.T) {
 		}
 		return got
 	}
-	base65 := 3*742.31 + 3*742.31 + 3*751.97 + 3*751.97
-	base75 := 3*816.54 + 3*816.54 + 3*827.17 + 3*827.17
+	base65 := 3*742.31 + 3*743.05 + 3*751.97 + 3*762.50
+	base75 := 3*816.54 + 3*817.36 + 3*827.17 + 3*838.75
 
 	if got := annual(70, 1961, 2026); got != 0 {
 		t.Fatalf("OAS before the start year = %v, want 0", got)
@@ -103,12 +102,11 @@ func TestOASAnnual_StartYearAndAge75Treatment(t *testing.T) {
 	}
 }
 
-// TestOASRecovery_FullClawbackAtESDCCeilings covers the Done-when item that
-// the 15% recovery tax reaches zero net OAS at the ESDC full-clawback ceilings
-// ($154,708 at 65-74, $160,647 at 75+), which reconcile with twelve times the
-// January rate. The projection pays the larger four-quarter total, so at the
-// ceiling a few tens of dollars survive the recovery.
-func TestOASRecovery_FullClawbackAtESDCCeilings(t *testing.T) {
+// TestOASRecovery_FullClawbackUsesAnnualPension covers the same-year model's
+// full-recovery point. Because the model pays the four-quarter annual total,
+// it reaches zero at threshold + annual pension / 15%, not at a published
+// July-to-June recovery-range ceiling based on a different payment period.
+func TestOASRecovery_FullClawbackUsesAnnualPension(t *testing.T) {
 	recovery := func(oas, netIncome float64, year int) float64 {
 		t.Helper()
 		got, err := OASRecovery(oas, netIncome, year, forward)
@@ -118,15 +116,21 @@ func TestOASRecovery_FullClawbackAtESDCCeilings(t *testing.T) {
 		return got
 	}
 
-	oas65 := 12 * 742.31
-	oas75 := 12 * 816.54
+	oas65, err := OASAnnual(65, 1961, 2026, forward)
+	if err != nil {
+		t.Fatalf("OASAnnual 65-74: %v", err)
+	}
+	oas75, err := OASAnnual(65, 1951, 2026, forward)
+	if err != nil {
+		t.Fatalf("OASAnnual 75+: %v", err)
+	}
 
 	if got := recovery(oas65, 95323, 2026); got != 0 {
 		t.Fatalf("recovery at the threshold = %v, want 0", got)
 	}
 	withinDollar(t, recovery(oas65, 95323+10000, 2026), 0.15*10000)
-	withinDollar(t, oas65-recovery(oas65, 154708, 2026), 0)
-	withinDollar(t, oas75-recovery(oas75, 160647, 2026), 0)
+	withinDollar(t, oas65-recovery(oas65, 155319.60, 2026), 0)
+	withinDollar(t, oas75-recovery(oas75, 161319.40, 2026), 0)
 	// The recovery can never exceed the pension itself.
 	withinDollar(t, recovery(oas65, 1_000_000, 2026), oas65)
 	// A later year's threshold is indexed, so the same net income recovers

@@ -756,10 +756,9 @@ assumptions: {portfolio_return: 0.05, inflation: 0.021}
 `
 	results := mustRun(t, yamlText, 2026)
 	cpi10 := math.Pow(1.021, 10)
-	// The 2026 OAS totals across the four quarterly rates: Jan-Mar carried
-	// through H1, Jul-Sep through H2.
-	oas65 := 3*742.31 + 3*742.31 + 3*751.97 + 3*751.97
-	oas75 := 3*816.54 + 3*816.54 + 3*827.17 + 3*827.17
+	// The 2026 OAS totals across the four quarterly rates.
+	oas65 := 3*742.31 + 3*743.05 + 3*751.97 + 3*762.50
+	oas75 := 3*816.54 + 3*817.36 + 3*827.17 + 3*838.75
 
 	// 2026: Alex is 65, so only Alex's CPP and OAS are paid. With no
 	// accounts, they are the year's entire mandatory income.

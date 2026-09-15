@@ -58,7 +58,9 @@ func OASAnnual(startAge, birthYear, year int, f constants.Forward) (float64, err
 // OASRecovery returns the recovery tax on the year's OAS pension: 15% of net
 // income over the threshold, capped at the pension itself. Net income includes
 // the OAS pension, so the recovery is evaluated once the year's income is
-// known. The pension is fully clawed back at the ESDC full-clawback ceilings.
+// known. Under the documented same-year approximation, full recovery occurs
+// at threshold + the actual annual pension / the recovery rate; the published
+// ESDC recovery-range ceilings describe the real July-to-June cycle instead.
 func OASRecovery(oasReceived, netIncome float64, year int, f constants.Forward) (float64, error) {
 	row, rowYear, err := constants.OAS.For(year)
 	if err != nil {

@@ -11,18 +11,16 @@ and the validation cases the engine is gated on.
 
 OAS is re-indexed every quarter (January, April, July, and October), so a
 year's pension is not twelve times any single quarter's rate. The engine stores
-the published monthly rate for each quarterly review in the dated table and sums
-the twelve months. For 2026 it carries the most recent published rate through
-quarters the rate card does not separately state: the Jan–Mar rates ($742.31 at
-65–74, $816.54 at 75+) through April–June, and the Jul–Sep rates ($751.97 and
-$827.17) through October–December. The year's twelve-month total is $8,965.68 at
-65–74 and $9,862.26 at 75+. From the year after the newest dated row, the
-four-quarter total grows by one annual CPI factor per year — the documented
-convention for quarterly indexation in an annual model. The quarterly shape is
-not re-applied inside each future year, so the total is never double-indexed.
-The ESDC full-clawback ceilings are published against twelve times the January
-rate, so at the ceiling the recovery leaves a few tens of dollars of the larger
-annualized pension unclawed.
+the applicable monthly rate for each quarterly review in the dated table and
+sums the twelve months. The 2026 monthly rates are $742.31/$816.54 for January–March,
+$743.05/$817.36 for April–June, $751.97/$827.17 for July–September, and
+$762.50/$838.75 for October–December (65–74/75+). The October rates apply
+ESDC's announced 1.4% adjustment to the July rates. The year's twelve-month
+total is therefore $8,999.49 at 65–74 and $9,899.46 at 75+. From the year after
+the newest dated row, the four-quarter total grows by one annual CPI factor per
+year — the documented convention for quarterly indexation in an annual model.
+The quarterly shape is not re-applied inside each future year, so the total is
+never double-indexed.
 
 ### OAS recovery timing
 
@@ -34,3 +32,10 @@ threshold))`, computed from the same year's income and charged in that year's
 cash flow. Relative to the real cycle this shifts each year's recovery by up to
 a year (a rising income is recovered sooner, a falling one later) without
 changing the 15% rate or the income base.
+
+The published ESDC recovery-range ceilings ($154,708 at 65–74 and $160,647 at
+75+) reconcile with twelve January payments and remain external reference
+figures for the real July-to-June cycle. They are not the full-recovery points
+for the larger four-quarter pension under the same-year approximation. With a
+$95,323 threshold, the model fully recovers the 2026 annual pension at
+`threshold + annual OAS / 0.15`: $155,319.60 at 65–74 and $161,319.40 at 75+.

@@ -1,3 +1,13 @@
+---
+title: Deterministic Retirement Engine
+slug: 001-deterministic-retirement-engine
+status: Accepted
+adrs:
+  - ../../docs/adr/0002-use-nominal-dollar-engine.md
+  - ../../docs/adr/0003-store-constants-in-dated-tables.md
+  - ../../docs/adr/0005-enforce-correctness-with-ci-gates.md
+---
+
 # Deterministic Retirement Engine
 
 **Slug**: `001-deterministic-retirement-engine`
@@ -21,7 +31,7 @@ its validation cases passing within ±$1.
 - [Ontario Retirement Simulator Spec §6.2](../../ontario-retirement-simulator-spec.md) — the engine works in nominal dollars and deflates once at the reporting layer; every year-specific constant carries its index basis (CPI, average wage, fixed, plan-specific, or user-set)
 - [Ontario Retirement Simulator Spec §0 and §5.6](../../ontario-retirement-simulator-spec.md) — zero-bequest household (`children == False`, `target_terminal_estate == 0`): success means terminal real wealth ≈ 0 at second death; the CPP child-rearing drop-out, RESP, and bequest-preservation heuristics are omitted entirely
 - [Ontario Retirement Simulator Spec §2.1 and §10](../../ontario-retirement-simulator-spec.md) — CPP is approximated from each spouse's stated entitlement scaled by start-age factors, never reconstructed from earnings history
-- [Ontario Retirement Simulator Spec §2.2 and §10](../../ontario-retirement-simulator-spec.md) — a same-year OAS clawback approximation is acceptable if documented; the ESDC figures ($154,708 / $160,647 full-clawback ceilings) are authoritative
+- [Ontario Retirement Simulator Spec §2.2 and §10](../../ontario-retirement-simulator-spec.md) — a same-year OAS clawback approximation is acceptable if documented; the ESDC recovery-range ceilings ($154,708 / $160,647) remain authoritative external references, while the model derives its full-recovery points from the annual pension it actually pays
 - [Ontario Retirement Simulator Spec §7](../../ontario-retirement-simulator-spec.md) — the annual order of operations is fixed as written there, and its validation cases within ±$1 are the gate this epic must pass
 
 ## Out of Scope
@@ -41,7 +51,7 @@ its validation cases passing within ±$1.
 - The engine and CLI are written in Go per the standing convention for new backends, with a web frontend as a later epic; this greenfield stack choice deserves its own ADR before implementation starts
 - Household config is a single YAML file; a working example ships with the repo
 - Each spouse's CPP is entered as the expected monthly amount at 65 (from My Service Canada Account) plus a chosen start age; the engine applies the actuarial factors, indexation, and survivor cap
-- OAS recovery tax uses a same-year approximation (reality is prior-year income on a July–June cycle) and quarterly indexation is applied as one annual CPI factor — both conventions documented in the README, as the governing spec requires
+- OAS recovery tax uses a same-year approximation (reality is prior-year income on a July–June cycle), quarterly indexation is applied as one annual CPI factor after the dated 2026 four-quarter total, and full recovery occurs at `threshold + annual OAS / 15%` — these conventions are documented in the README, as the governing spec requires
 - Deaths occur at fixed, user-set ages (default 95; an age-100 sensitivity run is a config edit away), per the governing spec's deterministic-mode default
 - Deterministic returns default to the FP Canada 2026 Projection Assumption Guidelines and are user-overridable per asset class; non-registered asset returns distinguish annual taxable yields (eligible dividends, interest) from unrealized growth, with reinvested distributions increasing ACB
 - Both spouses have full OAS (40 years' residence at 65) and remain Ontario residents for the whole projection, per the household profile in the governing spec
@@ -111,8 +121,10 @@ As a household planner, I want CPP, OAS, and GIS modelled for each spouse at our
 
 CPP entitlement scales by start age (60 → 0.640×, 70 → 1.420×) and indexes
 in pay; OAS defers up to +36% at 70, increases by a permanent +10% starting at
-age 75, with a 15% recovery tax on net income over the threshold, using the
-ESDC full-clawback ceilings ($154,708 at 65–74, $160,647 at 75+). GIS, and the
+age 75, with a 15% recovery tax on net income over the threshold. The ESDC
+recovery-range ceilings ($154,708 at 65–74, $160,647 at 75+) are pinned as
+external references, while the documented same-year approximation derives its
+full-recovery point from the actual annual pension. GIS, and the
 smaller income-tested seniors' credits (OSHPTG, the Ontario Trillium Benefit,
 the GST/HST credit, the medical expense credit, and the Canada Caregiver
 Credit), are evaluated every year even though they are usually zero for this
@@ -191,7 +203,7 @@ estate value against the $0 target.
 ### US5
 
 - [ ] T016 Implement CPP by entitlement × start-age factor, CPI in-pay indexation, survivor benefit under the combined cap, and user-set sharing — `internal/benefits/cpp.go`
-- [ ] T017 Implement OAS with deferral, age-75 permanent +10% boost, recovery tax, and the ESDC full-clawback ceilings — `internal/benefits/oas.go`
+- [ ] T017 Implement OAS with deferral, age-75 permanent +10% boost, recovery tax, the ESDC recovery-range references, and same-year full-recovery points — `internal/benefits/oas.go`
 - [ ] T018 Implement the annual GIS evaluation — `internal/benefits/gis.go`
 - [ ] T019 Implement the annual evaluation of the smaller income-tested seniors' credits (OSHPTG, Ontario Trillium Benefit, GST/HST credit, medical expense credit, Canada Caregiver Credit) — `internal/benefits/seniors_credits.go`
 
@@ -214,7 +226,7 @@ estate value against the $0 target.
 ## Done When
 
 - [ ] `retire project --config household.example.yaml` completes a projection from the current year to the second death and writes a year-by-year table and CSV in both nominal and today's dollars
-- [ ] Every validation case in the governing spec runs as a named test in CI and lands within ±$1, including the gross-vs-net solve, the RRIF minimums, the OAS clawback ceilings, and the spousal-RRIF minimum attributing $0 to the contributor
+- [ ] Every validation case in the governing spec runs as a named test in CI and lands within ±$1, including the gross-vs-net solve, the RRIF minimums, both the published OAS recovery-range references and same-year full-recovery points, and the spousal-RRIF minimum attributing $0 to the contributor
 - [ ] A TFSA withdrawal in a projection year restores room on January 1 of the following year, shown by a unit test
 - [ ] A run in which a spouse dies shows one OAS ceasing, CPP survivor applied under the combined cap, single brackets and credits, splitting stopped, spending at the survivor factor, and the TFSA merge adding no contribution room
 - [ ] The terminal summary reports second-death tax including the full remaining RRIF inclusion, and terminal real wealth against the $0 estate target
