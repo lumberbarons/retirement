@@ -284,6 +284,137 @@ assumptions: {portfolio_return: 0.05, inflation: 0.021}
 	}
 }
 
+// TestRun_MandatoryIncomeAboveTargetCapsSpendingAndRetainsSurplus covers the
+// Done-when item that a year whose mandatory income exceeds the spending
+// target reports spending equal to the target, not every after-tax dollar the
+// RRIF minimum and benefits pay out. The excess is retained: each spouse's
+// share follows their own after-tax cash into a destination they own, and a
+// share with no destination is reported as unallocated rather than dropped.
+func TestRun_MandatoryIncomeAboveTargetCapsSpendingAndRetainsSurplus(t *testing.T) {
+	results := mustRun(t, `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1956, retirement_age: 40, cpp: {monthly_at_65: 1000, start_age: 65}, oas: {start_age: 65}}
+  - {name: Sam, birth_year: 1958, retirement_age: 40, cpp: {monthly_at_65: 800, start_age: 65}, oas: {start_age: 65}}
+accounts:
+  - {name: Alex RRIF, type: rrif, owner: Alex, balance: 2000000}
+  - {name: Alex taxable, type: non_registered, owner: Alex, balance: 100000, acb: 80000}
+spending: {target_today_dollars: 20000, mode: flat}
+assumptions: {portfolio_return: 0.05, inflation: 0.021}
+`, 2026)
+	first := results[0]
+	if first.MandatoryIncome <= first.TargetNominal {
+		t.Fatalf("mandatory income = %v, want above the %v target for this case", first.MandatoryIncome, first.TargetNominal)
+	}
+	if first.Withdrawals != 0 {
+		t.Fatalf("discretionary withdrawals = %v, want 0 (mandatory income covers the target)", first.Withdrawals)
+	}
+	if first.NetSpending != first.TargetNominal {
+		t.Fatalf("net spending = %v, want the %v target, not all mandatory cash", first.NetSpending, first.TargetNominal)
+	}
+	if first.Surplus <= 0 {
+		t.Fatalf("surplus = %v, want the after-tax excess retained", first.Surplus)
+	}
+	alex, sam := first.Spouses[0], first.Spouses[1]
+	if alex.Surplus <= 0 || sam.Surplus <= 0 {
+		t.Fatalf("spouse surplus = %v/%v, want both positive", alex.Surplus, sam.Surplus)
+	}
+	if got := alex.Surplus + sam.Surplus; got != first.Surplus {
+		t.Fatalf("spouse surplus sums to %v, want the household surplus %v", got, first.Surplus)
+	}
+	if first.UnallocatedSurplus != sam.UnallocatedSurplus {
+		t.Fatalf("unallocated surplus = %v, want Sam's share %v with no account of their own",
+			first.UnallocatedSurplus, sam.UnallocatedSurplus)
+	}
+	taxable := accountYear(t, first, "Alex taxable")
+	if want := RoundCents(100000*1.05) + alex.Surplus; taxable.End != want {
+		t.Fatalf("Alex taxable end = %v, want %v (grown balance plus retained surplus)", taxable.End, want)
+	}
+}
+
+// TestRun_HouseholdNetWorthReconciles covers the Done-when item that every
+// year's net worth reconciles from the beginning balance through returns,
+// withdrawals, spending, and the surplus transferred back in. The walk runs
+// the whole projection, so working years exercise retained surplus and
+// retirement years the gross-vs-net solve.
+func TestRun_HouseholdNetWorthReconciles(t *testing.T) {
+	const portfolioReturn = 0.05
+	results := mustRun(t, baseHousehold, 2026)
+	for _, y := range results {
+		returns := 0.0
+		for _, a := range y.Accounts {
+			returns += a.Begin * portfolioReturn
+		}
+		rrifMinimum := y.MandatoryIncome - y.CPP - y.OAS
+		deposits := y.Surplus - y.UnallocatedSurplus
+		wantEnd := y.BeginTotal + returns - rrifMinimum - y.Withdrawals + deposits
+		tolerance := 0.01 * float64(len(y.Accounts)+1)
+		if math.Abs(y.EndTotal-wantEnd) > tolerance {
+			t.Fatalf("year %d: end total %v, want %v (begin %v + returns %v - RRIF minimums %v - withdrawals %v + deposits %v)",
+				y.Year, y.EndTotal, wantEnd, y.BeginTotal, returns, rrifMinimum, y.Withdrawals, deposits)
+		}
+		netCash := y.GrossIncome - y.Tax - y.OASRecovery + y.GIS - y.CPPContributions
+		if y.NetSpending > y.TargetNominal+0.005 {
+			t.Fatalf("year %d: net spending %v exceeds the target %v", y.Year, y.NetSpending, y.TargetNominal)
+		}
+		if y.NetSpending > netCash+0.005 {
+			t.Fatalf("year %d: net spending %v exceeds after-tax cash %v", y.Year, y.NetSpending, netCash)
+		}
+		if y.Surplus > 0 {
+			if got := y.NetSpending + y.Surplus; math.Abs(got-netCash) > 0.005 {
+				t.Fatalf("year %d: spending %v plus surplus %v = %v, want after-tax cash %v",
+					y.Year, y.NetSpending, y.Surplus, got, netCash)
+			}
+		}
+	}
+}
+
+// TestStepYear_ZeroTargetRRIFMinimumIsRetained covers the Done-when item that
+// a forced RRIF minimum does not disappear when there is no spending target to
+// offset it: the withdrawal leaves the RRIF, pays its tax, and the after-tax
+// remainder is deposited back into the household's taxable account. Run
+// rejects a zero target, so the year is stepped directly.
+func TestStepYear_ZeroTargetRRIFMinimumIsRetained(t *testing.T) {
+	h := mustHousehold(t, `base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1956, retirement_age: 40, oas: {start_age: 70}}
+  - {name: Sam, birth_year: 1958, retirement_age: 40, oas: {start_age: 70}}
+accounts:
+  - {name: Alex RRIF, type: rrif, owner: Alex, balance: 500000}
+  - {name: Alex taxable, type: non_registered, owner: Alex, balance: 100000, acb: 90000}
+spending: {target_today_dollars: 50000, mode: flat}
+assumptions: {portfolio_return: 0.05, inflation: 0.021}
+`)
+	h.Spending.TargetTodayDollars = 0
+	s := NewState(h, 2026)
+	res, err := s.stepYear(h)
+	if err != nil {
+		t.Fatalf("stepYear: %v", err)
+	}
+	if res.TargetNominal != 0 || res.NetSpending != 0 {
+		t.Fatalf("target/spending = %v/%v, want 0/0", res.TargetNominal, res.NetSpending)
+	}
+	rrif := accountYear(t, res, "Alex RRIF")
+	if rrif.Withdrawal <= 0 {
+		t.Fatalf("RRIF withdrawal = %v, want the forced minimum", rrif.Withdrawal)
+	}
+	if res.Withdrawals != 0 {
+		t.Fatalf("discretionary withdrawals = %v, want 0", res.Withdrawals)
+	}
+	if res.Surplus <= 0 {
+		t.Fatalf("surplus = %v, want the after-tax minimum retained instead of dropped", res.Surplus)
+	}
+	if res.UnallocatedSurplus != 0 {
+		t.Fatalf("unallocated surplus = %v, want 0 with a taxable account to receive it", res.UnallocatedSurplus)
+	}
+	taxable := accountYear(t, res, "Alex taxable")
+	if want := RoundCents(100000*1.05) + res.Surplus; taxable.End != want {
+		t.Fatalf("taxable end = %v, want %v (grown balance plus the retained minimum)", taxable.End, want)
+	}
+	if want := RoundCents(500000*1.05 - rrif.Withdrawal); rrif.End != want {
+		t.Fatalf("RRIF end = %v, want %v (grown balance less the minimum)", rrif.End, want)
+	}
+}
+
 // TestRun_SurplusStaysWithItsEarnerWhenAccountsAreReversed covers surplus
 // ownership: with one taxable account per spouse, each spouse's share lands
 // in their own account even though the other spouse's account is listed first
