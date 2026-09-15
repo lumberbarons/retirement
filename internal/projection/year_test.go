@@ -318,7 +318,7 @@ assumptions: {portfolio_return: 0.05, inflation: 0.021}
 	if alex.Surplus <= 0 || sam.Surplus <= 0 {
 		t.Fatalf("spouse surplus = %v/%v, want both positive", alex.Surplus, sam.Surplus)
 	}
-	if got := alex.Surplus + sam.Surplus; got != first.Surplus {
+	if got := alex.Surplus + sam.Surplus; math.Abs(got-first.Surplus) > 0.005 {
 		t.Fatalf("spouse surplus sums to %v, want the household surplus %v", got, first.Surplus)
 	}
 	if first.UnallocatedSurplus != sam.UnallocatedSurplus {
@@ -407,7 +407,7 @@ assumptions: {portfolio_return: 0.05, inflation: 0.021}
 		t.Fatalf("unallocated surplus = %v, want 0 with a taxable account to receive it", res.UnallocatedSurplus)
 	}
 	taxable := accountYear(t, res, "Alex taxable")
-	if want := RoundCents(100000*1.05) + res.Surplus; taxable.End != want {
+	if want := RoundCents(100000*1.05) + res.Surplus; math.Abs(taxable.End-want) > 0.005 {
 		t.Fatalf("taxable end = %v, want %v (grown balance plus the retained minimum)", taxable.End, want)
 	}
 	if want := RoundCents(500000*1.05 - rrif.Withdrawal); rrif.End != want {
@@ -756,21 +756,25 @@ assumptions: {portfolio_return: 0.05, inflation: 0.021}
 `
 	results := mustRun(t, yamlText, 2026)
 	cpi10 := math.Pow(1.021, 10)
+	// The 2026 OAS totals across the four quarterly rates: Jan-Mar carried
+	// through H1, Jul-Sep through H2.
+	oas65 := 3*742.31 + 3*742.31 + 3*751.97 + 3*751.97
+	oas75 := 3*816.54 + 3*816.54 + 3*827.17 + 3*827.17
 
 	// 2026: Alex is 65, so only Alex's CPP and OAS are paid. With no
 	// accounts, they are the year's entire mandatory income.
 	withinDollar(t, results[0].CPP, 12*1000)
-	withinDollar(t, results[0].OAS, 12*742.31)
+	withinDollar(t, results[0].OAS, oas65)
 	withinDollar(t, results[0].MandatoryIncome, results[0].CPP+results[0].OAS)
 
 	// 2035: Sam is 69, so Sam's CPP and OAS are still zero.
 	withinDollar(t, results[2035-2026].CPP, 12*1000*math.Pow(1.021, 9))
-	withinDollar(t, results[2035-2026].OAS, 12*742.31*math.Pow(1.021, 9))
+	withinDollar(t, results[2035-2026].OAS, oas65*math.Pow(1.021, 9))
 
 	// 2036: Sam turns 70 — CPP at 1.420x and OAS at +36%, while Alex turns 75
 	// into the permanent +10% OAS rate.
 	withinDollar(t, results[2036-2026].CPP, 12*1000*cpi10+12*1000*1.42*cpi10)
-	withinDollar(t, results[2036-2026].OAS, 12*816.54*cpi10+12*742.31*1.36*cpi10)
+	withinDollar(t, results[2036-2026].OAS, oas75*cpi10+oas65*1.36*cpi10)
 }
 
 // TestRun_NoGISBeforeOASStarts covers the Done-when item that GIS is

@@ -333,8 +333,13 @@ var CPPSurvivor65PlusShare = Scalar{
 }
 
 type OASYear struct {
-	Monthly65to74         float64
-	Monthly75Plus         float64
+	// Quarterly65to74 and Quarterly75Plus hold the published monthly rate at
+	// each of the four quarterly reviews (Jan, Apr, Jul, Oct). The annual
+	// pension is the twelve-month total, never 12 x any single quarter;
+	// element 0 is the January-to-March rate that the ESDC full-clawback
+	// ceilings reconcile with.
+	Quarterly65to74       [4]float64
+	Quarterly75Plus       [4]float64
 	ClawbackThreshold     float64
 	ClawbackCeiling65to74 float64
 	ClawbackCeiling75Plus float64
@@ -343,11 +348,11 @@ type OASYear struct {
 var OAS = Table[OASYear]{
 	Desc:         "OAS amounts and clawback thresholds",
 	Basis:        BasisCPI,
-	Source:       "ESDC quarterly rate card Jan-Mar 2026 (annual model applies the Jan rate for the full year)",
+	Source:       "ESDC 2026 rate card: Jan-Mar 742.31/816.54, Jul-Sep 751.97/827.17; quarters with no published change carry the prior rate (Apr-Jun carries Jan-Mar, Oct-Dec carries Jul-Sep)",
 	LastVerified: "2026-09",
 	Rows: map[int]OASYear{2026: {
-		Monthly65to74:         742.31,
-		Monthly75Plus:         816.54,
+		Quarterly65to74:       [4]float64{742.31, 742.31, 751.97, 751.97},
+		Quarterly75Plus:       [4]float64{816.54, 816.54, 827.17, 827.17},
 		ClawbackThreshold:     95323,
 		ClawbackCeiling65to74: 154708,
 		ClawbackCeiling75Plus: 160647,

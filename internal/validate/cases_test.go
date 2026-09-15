@@ -75,8 +75,8 @@ func TestValidation_OASFullClawbackCeilings(t *testing.T) {
 		monthly float64
 		ceiling float64
 	}{
-		{"65-74", row.Monthly65to74, row.ClawbackCeiling65to74},
-		{"75+", row.Monthly75Plus, row.ClawbackCeiling75Plus},
+		{"65-74", row.Quarterly65to74[0], row.ClawbackCeiling65to74},
+		{"75+", row.Quarterly75Plus[0], row.ClawbackCeiling75Plus},
 	}
 	for _, c := range cases {
 		recoveryAtCeiling := rate * (c.ceiling - row.ClawbackThreshold)
@@ -93,8 +93,8 @@ func TestValidation_FullOASAmounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("constants.OAS.For: %v", err)
 	}
-	if row.Monthly65to74 != 742.31 || row.Monthly75Plus != 816.54 {
-		t.Fatalf("OAS rates = %v/%v, want 742.31/816.54", row.Monthly65to74, row.Monthly75Plus)
+	if row.Quarterly65to74[0] != 742.31 || row.Quarterly75Plus[0] != 816.54 {
+		t.Fatalf("OAS rates = %v/%v, want 742.31/816.54", row.Quarterly65to74[0], row.Quarterly75Plus[0])
 	}
 }
 

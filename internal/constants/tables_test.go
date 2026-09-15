@@ -171,8 +171,11 @@ func TestOAS2026(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OAS.For(2026): %v", err)
 	}
-	if o.Monthly65to74 != 742.31 || o.Monthly75Plus != 816.54 {
-		t.Fatalf("OAS monthly = %v/%v, want 742.31/816.54", o.Monthly65to74, o.Monthly75Plus)
+	if o.Quarterly65to74 != [4]float64{742.31, 742.31, 751.97, 751.97} {
+		t.Fatalf("OAS 65-74 quarterly rates = %v, want Jan-Mar 742.31 and Jul-Sep 751.97 with the prior rate carried", o.Quarterly65to74)
+	}
+	if o.Quarterly75Plus != [4]float64{816.54, 816.54, 827.17, 827.17} {
+		t.Fatalf("OAS 75+ quarterly rates = %v, want Jan-Mar 816.54 and Jul-Sep 827.17 with the prior rate carried", o.Quarterly75Plus)
 	}
 	if o.ClawbackThreshold != 95323 {
 		t.Fatalf("OAS clawback threshold = %v, want 95323", o.ClawbackThreshold)

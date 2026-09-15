@@ -32,26 +32,71 @@ func TestOASFactor_DeferralTo70(t *testing.T) {
 	}
 }
 
-// TestOASAnnual_BaseRatesAgeBoostAndDeferral covers the Done-when item's
-// published amounts: $742.31/mo at 65-74, the permanent +10% ($816.54/mo) at
-// 75+, the deferral factor on top, and CPI indexation.
-func TestOASAnnual_BaseRatesAgeBoostAndDeferral(t *testing.T) {
+// TestOASAnnual_SumsTheFourQuarterlyRates covers the Done-when item that the
+// 2026 pension uses all four quarterly periods: the Jan-Mar rate is carried
+// through Q2 and the Jul-Sep rate through Q4, so the year is not twelve times
+// the January amount.
+func TestOASAnnual_SumsTheFourQuarterlyRates(t *testing.T) {
+	got, err := OASAnnual(65, 1961, 2026, forward)
+	if err != nil {
+		t.Fatalf("OASAnnual: %v", err)
+	}
+	want := 3*742.31 + 3*742.31 + 3*751.97 + 3*751.97
+	withinDollar(t, got, want)
+	if january := 12 * 742.31; math.Abs(got-january) <= 1 {
+		t.Fatalf("2026 OAS = %v, want the four-quarter total %v, not 12 x January %v", got, want, january)
+	}
+}
+
+// TestOASAnnual_FutureYearsApplyOneAnnualCPI covers the Done-when item that
+// later years grow the four-quarter total by the documented annual CPI
+// convention: one factor per year, never re-applied quarterly within the year.
+func TestOASAnnual_FutureYearsApplyOneAnnualCPI(t *testing.T) {
+	annual := func(year int) float64 {
+		t.Helper()
+		got, err := OASAnnual(65, 1962, year, forward)
+		if err != nil {
+			t.Fatalf("OASAnnual(%d): %v", year, err)
+		}
+		return got
+	}
+	base := 3*742.31 + 3*742.31 + 3*751.97 + 3*751.97
+
+	withinDollar(t, annual(2027), base*1.021)
+	withinDollar(t, annual(2036), base*math.Pow(1.021, 10))
+	if doubleIndexed := base * math.Pow(1.021, 20); math.Abs(annual(2036)-doubleIndexed) <= 1 {
+		t.Fatalf("2036 OAS = %v, want one CPI factor per year, got a double-indexed %v", annual(2036), doubleIndexed)
+	}
+}
+
+// TestOASAnnual_StartYearAndAge75Treatment covers the Done-when item that both
+// transitions are explicit: nothing before the start year, the full annual
+// amount in the start year (no pro-rating), the 75+ quarterly rates from the
+// year the spouse turns 75, and the deferral factor applied on top.
+func TestOASAnnual_StartYearAndAge75Treatment(t *testing.T) {
 	annual := func(startAge, birthYear, year int) float64 {
 		t.Helper()
 		got, err := OASAnnual(startAge, birthYear, year, forward)
 		if err != nil {
-			t.Fatalf("OASAnnual: %v", err)
+			t.Fatalf("OASAnnual(%d, %d, %d): %v", startAge, birthYear, year, err)
 		}
 		return got
 	}
+	base65 := 3*742.31 + 3*742.31 + 3*751.97 + 3*751.97
+	base75 := 3*816.54 + 3*816.54 + 3*827.17 + 3*827.17
 
 	if got := annual(70, 1961, 2026); got != 0 {
 		t.Fatalf("OAS before the start year = %v, want 0", got)
 	}
-	withinDollar(t, annual(65, 1961, 2026), 12*742.31)
-	withinDollar(t, annual(65, 1961, 2036), 12*816.54*math.Pow(1.021, 10))
-	withinDollar(t, annual(70, 1956, 2026), 12*742.31*1.36)
-	withinDollar(t, annual(70, 1956, 2031), 12*816.54*1.36*math.Pow(1.021, 5))
+	// The start year pays the full annual amount.
+	withinDollar(t, annual(65, 1961, 2026), base65)
+	// Age is taken at December 31: the 75+ rates begin in the year of the
+	// spouse's 75th birthday.
+	withinDollar(t, annual(65, 1951, 2026), base75)
+	withinDollar(t, annual(65, 1952, 2026), base65)
+	// Deferral applies on top of the applicable quarterly total.
+	withinDollar(t, annual(70, 1956, 2026), base65*1.36)
+	withinDollar(t, annual(70, 1951, 2026), base75*1.36)
 
 	if _, err := OASAnnual(64, 1961, 2026, forward); err == nil {
 		t.Fatal("OASAnnual with start age 64 should error")
@@ -60,7 +105,9 @@ func TestOASAnnual_BaseRatesAgeBoostAndDeferral(t *testing.T) {
 
 // TestOASRecovery_FullClawbackAtESDCCeilings covers the Done-when item that
 // the 15% recovery tax reaches zero net OAS at the ESDC full-clawback ceilings
-// ($154,708 at 65-74, $160,647 at 75+).
+// ($154,708 at 65-74, $160,647 at 75+), which reconcile with twelve times the
+// January rate. The projection pays the larger four-quarter total, so at the
+// ceiling a few tens of dollars survive the recovery.
 func TestOASRecovery_FullClawbackAtESDCCeilings(t *testing.T) {
 	recovery := func(oas, netIncome float64, year int) float64 {
 		t.Helper()
