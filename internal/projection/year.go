@@ -406,13 +406,16 @@ func (s *State) surplusDestination(h *config.Household, owner string) int {
 // recovery is 15% of each spouse's net income over the threshold, capped at
 // the pension received; net income is approximated by taxable income and the
 // recovery is taken in the same year rather than on the real July-to-June
-// cycle. GIS is evaluated for each spouse receiving OAS, using the single
-// test once one spouse has died.
+// cycle. GIS is tested on income excluding OAS and GIS: a surviving spouse on
+// their own income, and a couple on the combined income of both spouses for
+// the spouse-of-pensioner category.
 func (s *State) benefitAdjustments(h *config.Household, incomes []tax.Income, result tax.Result) (recovery, gis []float64, err error) {
 	f := s.forward(h)
 	single := s.survivors() == 1
 	recovery = make([]float64, len(s.People))
 	gis = make([]float64, len(s.People))
+	base := make([]float64, len(s.People))
+	employment := make([]float64, len(s.People))
 	for i := range s.People {
 		p := &s.People[i]
 		if !p.Alive {
@@ -423,15 +426,28 @@ func (s *State) benefitAdjustments(h *config.Household, incomes []tax.Income, re
 		if err != nil {
 			return nil, nil, err
 		}
-		if s.Year < p.BirthYear+p.OASStartAge {
+		base[i] = math.Max(0, netIncome-incomes[i].OAS)
+		employment[i] = math.Max(0, incomes[i].Employment)
+	}
+	for i := range s.People {
+		p := &s.People[i]
+		if !p.Alive {
 			continue
 		}
-		gis[i], err = benefits.GISAnnual(benefits.GISInput{
-			Year:        s.Year,
-			Forward:     f,
-			Single:      single,
-			OtherIncome: math.Max(0, netIncome-incomes[i].OAS),
-		})
+		in := benefits.GISInput{
+			Year:             s.Year,
+			Forward:          f,
+			Single:           single,
+			OASReceived:      s.Year >= p.BirthYear+p.OASStartAge,
+			Income:           base[i],
+			EmploymentIncome: employment[i],
+		}
+		if !single {
+			j := 1 - i
+			in.PartnerIncome = base[j]
+			in.PartnerEmploymentIncome = employment[j]
+		}
+		gis[i], err = benefits.GISAnnual(in)
 		if err != nil {
 			return nil, nil, err
 		}
