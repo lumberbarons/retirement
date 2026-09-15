@@ -112,6 +112,12 @@ func TestLoad_ExampleCoversSchema(t *testing.T) {
 	}
 	pensionFound := false
 	for _, s := range h.Spouses {
+		if s.EmploymentIncome <= 0 {
+			t.Fatalf("%s: employment_income = %v, want > 0", s.Name, s.EmploymentIncome)
+		}
+		if s.SavingsAccount == "" {
+			t.Fatalf("%s: savings_account is empty, want a retained-surplus destination", s.Name)
+		}
 		if s.CPP.MonthlyAt65 <= 0 {
 			t.Fatalf("%s: cpp.monthly_at_65 = %v, want > 0", s.Name, s.CPP.MonthlyAt65)
 		}
@@ -207,6 +213,24 @@ func TestLoad_InvalidConfigNamesFirstOffendingField(t *testing.T) {
 		{"death age above 120", "birth_year: 1980\n    retirement_age: 60", "birth_year: 1980\n    retirement_age: 60\n    death_age: 121", "spouses[0].death_age"},
 		{"retirement age below 40", "retirement_age: 60", "retirement_age: 35", "spouses[0].retirement_age"},
 		{"retirement age above 85", "retirement_age: 60", "retirement_age: 90", "spouses[0].retirement_age"},
+		{
+			"negative employment income",
+			"  - name: A\n    birth_year: 1980\n",
+			"  - name: A\n    birth_year: 1980\n    employment_income: -5\n",
+			"spouses[0].employment_income",
+		},
+		{
+			"unknown savings account",
+			"  - name: A\n    birth_year: 1980\n",
+			"  - name: A\n    birth_year: 1980\n    savings_account: Nope\n",
+			"spouses[0].savings_account",
+		},
+		{
+			"savings account is not non-registered",
+			"  - name: A\n    birth_year: 1980\n",
+			"  - name: A\n    birth_year: 1980\n    savings_account: A TFSA\n",
+			"spouses[0].savings_account",
+		},
 		{"negative cpp monthly", "monthly_at_65: 1000", "monthly_at_65: -5", "spouses[0].cpp.monthly_at_65"},
 		{"cpp start age above 70", "monthly_at_65: 1000\n      start_age: 65", "monthly_at_65: 1000\n      start_age: 75", "spouses[0].cpp.start_age"},
 		{"oas start age below 65", "oas:\n      start_age: 65", "oas:\n      start_age: 60", "spouses[0].oas.start_age"},
@@ -498,6 +522,60 @@ func TestLoad_EmptyFileFails(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "empty") {
 		t.Fatalf("error %q should say the config is empty", err.Error())
+	}
+}
+
+func TestLoad_ParsesEmploymentIncome(t *testing.T) {
+	h := mustLoad(t, writeConfig(t, `base_year: 2026
+spouses:
+  - {name: A, birth_year: 1980, retirement_age: 60, employment_income: 120000}
+  - {name: B, birth_year: 1982, retirement_age: 62, employment_income: 60000}
+accounts:
+  - {name: Savings, type: non_registered, owner: A, balance: 10000}
+spending: {target_today_dollars: 60000}
+`))
+	if h.Spouses[0].EmploymentIncome != 120000 {
+		t.Fatalf("spouse A employment income = %v, want 120000", h.Spouses[0].EmploymentIncome)
+	}
+	if h.Spouses[1].EmploymentIncome != 60000 {
+		t.Fatalf("spouse B employment income = %v, want 60000", h.Spouses[1].EmploymentIncome)
+	}
+}
+
+// TestLoad_WorkingHouseholdWithoutTaxableAccountLoads covers the loader fix:
+// employment income alone no longer demands a non_registered destination —
+// earnings below the spending target, or registered contribution routing,
+// leave nothing to deposit.
+func TestLoad_WorkingHouseholdWithoutTaxableAccountLoads(t *testing.T) {
+	h := mustLoad(t, writeConfig(t, `base_year: 2026
+spouses:
+  - {name: A, birth_year: 1980, retirement_age: 60, employment_income: 30000}
+  - {name: B, birth_year: 1982, retirement_age: 62}
+accounts:
+  - {name: A TFSA, type: tfsa, owner: A, balance: 50000}
+spending: {target_today_dollars: 60000}
+`))
+	if h.Spouses[0].SavingsAccount != "" {
+		t.Fatalf("savings account = %q, want empty by default", h.Spouses[0].SavingsAccount)
+	}
+}
+
+// TestLoad_ParsesSavingsAccount covers the explicit per-spouse surplus
+// destination, including a jointly held account modelled under the other
+// spouse's name.
+func TestLoad_ParsesSavingsAccount(t *testing.T) {
+	h := mustLoad(t, writeConfig(t, `base_year: 2026
+spouses:
+  - {name: A, birth_year: 1980, retirement_age: 60, employment_income: 120000, savings_account: Joint NR}
+  - {name: B, birth_year: 1982, retirement_age: 62, employment_income: 60000, savings_account: Joint NR}
+accounts:
+  - {name: Joint NR, type: non_registered, owner: B, balance: 1000}
+spending: {target_today_dollars: 60000}
+`))
+	for i, s := range h.Spouses {
+		if s.SavingsAccount != "Joint NR" {
+			t.Fatalf("spouses[%d].savings_account = %q, want Joint NR", i, s.SavingsAccount)
+		}
 	}
 }
 

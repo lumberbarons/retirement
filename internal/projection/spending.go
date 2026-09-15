@@ -20,13 +20,10 @@ const (
 // year. The configured target is stated in today's dollars; it is shaped,
 // has any lumpy streams added, is scaled by the survivor factor once one
 // spouse has died, and is then inflated at the spending rate — deliberately
-// separate from tax-bracket indexation (§6.5). Before the first retirement
-// year there is no spending target, so dated streams are not funded either.
+// separate from tax-bracket indexation (§6.5). The target applies across the
+// whole horizon (§6.1): in working years employment income funds it before
+// any discretionary withdrawal.
 func (s *State) nominalSpending(h *config.Household) float64 {
-	first := s.firstRetirementYear()
-	if s.Year < first {
-		return 0
-	}
 	real := h.Spending.TargetTodayDollars * s.shapeFactor(h)
 	if s.survivors() == 1 {
 		// The survivor factor scales the household's lifestyle target but
@@ -35,13 +32,7 @@ func (s *State) nominalSpending(h *config.Household) float64 {
 		real *= h.Spending.SurvivorFactor
 	}
 	real += s.lumpyTodayDollars(h, s.Year)
-	nominal := real * math.Pow(1+h.Spending.Inflation, float64(s.Year-h.BaseYear))
-	if s.Year == first {
-		// The engine models whole years, so the first retirement year is
-		// approximated as starting mid-year.
-		nominal *= midYearFraction
-	}
-	return RoundCents(nominal)
+	return RoundCents(real * math.Pow(1+h.Spending.Inflation, float64(s.Year-h.BaseYear)))
 }
 
 // shapeFactor is the real spending multiplier for the year: flat mode is 1,
