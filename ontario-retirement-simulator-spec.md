@@ -1,6 +1,15 @@
+---
+title: Implementation Specification for a Married Ontario Couple
+version: 4
+adrs:
+  - docs/adr/0002-use-nominal-dollar-engine.md
+  - docs/adr/0003-store-constants-in-dated-tables.md
+  - docs/adr/0005-enforce-correctness-with-ci-gates.md
+---
+
 # Implementation Specification: Retirement Simulator for a Married Ontario Couple (2026 Base Year)
 
-**Version 3.** Adds the spending-target model (§6), a zero-bequest configuration (§5.6), inter-spousal income-splitting vehicles (§1.4), and locked-in accounts (§1.5) — then **fact-checked against CRA and ESDC primary sources**. Three corrections were made (Ontario brackets, Ontario surtax thresholds, OAS full-clawback ceilings); see the verification table in §10.
+**Version 4.** Adds the spending-target model (§6), a zero-bequest configuration (§5.6), inter-spousal income-splitting vehicles (§1.4), and locked-in accounts (§1.5) — then **fact-checked against CRA and ESDC primary sources**. It also distinguishes the published OAS recovery-range ceilings for the real July-to-June administration cycle from the full-recovery points produced by the documented same-year approximation; see §2.2 and the verification table in §10.
 
 ---
 
@@ -166,10 +175,10 @@ OAS_RECOVERY_RATE = 0.15
 - **Indexation:** **quarterly** to CPI (Jan/Apr/Jul/Oct). For annual modelling apply the annual CPI factor; a full-year total is not exactly 12× any single quarter.
 - **Deferral:** +0.6%/month past 65, max **+36% at 70**.
 - **Recovery tax:** `recovery = min(OAS_received, 0.15 × max(0, net_income − 95323))`. Income base = net income (line 23400 less certain deductions → line 23500); **net world income includes the OAS itself**.
-- **Full-clawback ceilings — the two government sources disagree.** ESDC's quarterly rate card gives **$154,708 (65–74)** and **$160,647 (75+)**; CRA's recovery-tax page gives **$154,753** and **$160,696**, explicitly footnoted as *estimates* until finalized in Oct–Dec. **Use the ESDC figures** — they reconcile exactly with the arithmetic (`95,323 + 8,907.72/0.15 = 154,708`). Difference is ~$45, immaterial to planning but it will show up as a failing unit test if you pick the wrong one.
+- **Published recovery-range ceilings — the two government sources disagree.** ESDC's quarterly rate card gives **$154,708 (65–74)** and **$160,647 (75+)**; CRA's recovery-tax page gives **$154,753** and **$160,696**, explicitly footnoted as *estimates* until finalized in Oct–Dec. Preserve the ESDC figures as external reference constants — they reconcile within $1 with twelve January payments (`95,323 + 8,907.72/0.15 ≈ 154,708`). They describe the real July-to-June administration cycle and are not the full-recovery points for the larger four-quarter pension under the same-year approximation.
 
-> **Annual OAS total ≠ 12 × the January amount.** OAS is re-indexed **quarterly**. The Jan–Mar 2026 rate is $742.31/mo, but by Jul–Sep 2026 it had risen to **$751.97** (65–74) and **$827.17** (75+). Summing 12 × the January figure understates the year. Either sum four quarters or apply a mid-year average; document the choice, because it feeds the clawback calculation.
-- **Administration:** applied over a **July-to-June payment period based on the PRIOR calendar year's income**; Service Canada withholds from the monthly payment. A same-tax-year approximation is acceptable for planning — **document whichever convention you implement**.
+> **Annual OAS total ≠ 12 × the January amount.** OAS is re-indexed **quarterly**. The 2026 rates are $742.31/$816.54 for Jan–Mar, $743.05/$817.36 for Apr–Jun, $751.97/$827.17 for Jul–Sep, and $762.50/$838.75 for Oct–Dec (65–74/75+); the October rates apply ESDC's announced 1.4% adjustment. The full-year totals are **$8,999.49** and **$9,899.46**. Summing 12 × the January figure understates the year.
+- **Administration:** applied over a **July-to-June payment period based on the PRIOR calendar year's income**; Service Canada withholds from the monthly payment. The engine uses a documented same-tax-year approximation. Consequently, the model's non-deferred full-recovery points are derived from the pension it actually pays: `95,323 + annual_OAS / 0.15`, or **$155,319.60 (65–74)** and **$161,319.40 (75+)** for 2026.
 
 ### 2.3 GIS
 
@@ -448,7 +457,8 @@ Subtract investment fees; blend equity classes by portfolio weights.
 
 **Validation test cases:**
 - RRIF minimum at 71 on $500k Jan-1 = $26,400 (5.28%); at 72 = 5.40%.
-- OAS fully clawed back (65–74) at $154,708 net income (ESDC); 75+ at $160,647.
+- Published ESDC OAS recovery-range ceilings $154,708 (65–74) and $160,647 (75+) reconcile within $1 with the $95,323 threshold, 15% rate, and twelve January payments.
+- Under the documented same-year approximation, the actual four-quarter OAS pension is fully recovered at $155,319.60 net income (65–74) and $161,319.40 (75+).
 - Full OAS $742.31/mo (65–74), $816.54/mo (75+) at 40 years' residence.
 - CPP at 60 = 0.640 × base; at 70 = 1.420 × base.
 - $16,452 federal BPA → ~$2,303 federal credit at 14%.
@@ -498,7 +508,8 @@ Subtract investment fees; blend equity classes by portfolio weights.
 | Ontario Health Premium function | **Verified** — reproduces all official plateaus and ramps |
 | RRIF factors 71–95+ | **Verified** — all 25 values match ITR 7308 |
 | OAS threshold $95,323 | **Verified** — canada.ca recovery-tax page |
-| OAS full-clawback ceilings | **Corrected** — ESDC $154,708 / $160,647 preferred over CRA estimates |
+| OAS published recovery-range ceilings | **Corrected** — ESDC $154,708 / $160,647 retained as external references for the real July-to-June cycle |
+| OAS same-year full-recovery points | **Derived and validated** — $155,319.60 / $161,319.40 from the four-quarter pension and 15% rate |
 | CPP $1,507.65 / YMPE $74,600 / YAMPE $85,000 | **Verified** — ESDC 2026 rate card |
 | CPP survivor $803.54 / $904.59, combined cap $1,531.56 | **Verified** |
 | TFSA $7,000, cumulative $109,000 | **Verified** — table sums to $109,000 |

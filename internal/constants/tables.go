@@ -333,24 +333,32 @@ var CPPSurvivor65PlusShare = Scalar{
 }
 
 type OASYear struct {
-	Monthly65to74         float64
-	Monthly75Plus         float64
-	ClawbackThreshold     float64
-	ClawbackCeiling65to74 float64
-	ClawbackCeiling75Plus float64
+	// Quarterly65to74 and Quarterly75Plus hold the monthly rate applicable at
+	// each of the four quarterly reviews (Jan, Apr, Jul, Oct), whether published
+	// directly or derived from an announced adjustment. The annual pension is
+	// the twelve-month total, never 12 x any single quarter;
+	// element 0 is the January-to-March rate that the published ESDC recovery
+	// range ceilings reconcile with. Those published ceilings are reference
+	// figures for the real July-to-June administration cycle; the same-year
+	// model's full-recovery point depends on the actual annual pension paid.
+	Quarterly65to74                [4]float64
+	Quarterly75Plus                [4]float64
+	ClawbackThreshold              float64
+	PublishedClawbackCeiling65to74 float64
+	PublishedClawbackCeiling75Plus float64
 }
 
 var OAS = Table[OASYear]{
 	Desc:         "OAS amounts and clawback thresholds",
 	Basis:        BasisCPI,
-	Source:       "ESDC quarterly rate card Jan-Mar 2026 (annual model applies the Jan rate for the full year)",
+	Source:       "ESDC 2026 quarterly rate cards: Jan-Mar 742.31/816.54, Apr-Jun 743.05/817.36, Jul-Sep 751.97/827.17; Oct-Dec 762.50/838.75 from ESDC's announced 1.4% adjustment",
 	LastVerified: "2026-09",
 	Rows: map[int]OASYear{2026: {
-		Monthly65to74:         742.31,
-		Monthly75Plus:         816.54,
-		ClawbackThreshold:     95323,
-		ClawbackCeiling65to74: 154708,
-		ClawbackCeiling75Plus: 160647,
+		Quarterly65to74:                [4]float64{742.31, 743.05, 751.97, 762.50},
+		Quarterly75Plus:                [4]float64{816.54, 817.36, 827.17, 838.75},
+		ClawbackThreshold:              95323,
+		PublishedClawbackCeiling65to74: 154708,
+		PublishedClawbackCeiling75Plus: 160647,
 	}},
 }
 

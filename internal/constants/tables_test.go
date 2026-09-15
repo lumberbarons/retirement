@@ -171,14 +171,17 @@ func TestOAS2026(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OAS.For(2026): %v", err)
 	}
-	if o.Monthly65to74 != 742.31 || o.Monthly75Plus != 816.54 {
-		t.Fatalf("OAS monthly = %v/%v, want 742.31/816.54", o.Monthly65to74, o.Monthly75Plus)
+	if o.Quarterly65to74 != [4]float64{742.31, 743.05, 751.97, 762.50} {
+		t.Fatalf("OAS 65-74 quarterly rates = %v, want 742.31/743.05/751.97/762.50", o.Quarterly65to74)
+	}
+	if o.Quarterly75Plus != [4]float64{816.54, 817.36, 827.17, 838.75} {
+		t.Fatalf("OAS 75+ quarterly rates = %v, want 816.54/817.36/827.17/838.75", o.Quarterly75Plus)
 	}
 	if o.ClawbackThreshold != 95323 {
 		t.Fatalf("OAS clawback threshold = %v, want 95323", o.ClawbackThreshold)
 	}
-	if o.ClawbackCeiling65to74 != 154708 || o.ClawbackCeiling75Plus != 160647 {
-		t.Fatalf("OAS full-clawback ceilings = %v/%v, want 154708/160647 (ESDC)", o.ClawbackCeiling65to74, o.ClawbackCeiling75Plus)
+	if o.PublishedClawbackCeiling65to74 != 154708 || o.PublishedClawbackCeiling75Plus != 160647 {
+		t.Fatalf("OAS published recovery range ceilings = %v/%v, want 154708/160647 (ESDC)", o.PublishedClawbackCeiling65to74, o.PublishedClawbackCeiling75Plus)
 	}
 	rate := mustScalarFor(t, OASRecoveryRate, 2026, testFwd)
 	if rate != 0.15 {
