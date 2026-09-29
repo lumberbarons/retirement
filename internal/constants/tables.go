@@ -370,29 +370,50 @@ var OASDeferralMonthly = Scalar{
 	Rows:         map[int]float64{2026: 0.006},
 }
 
-var GISReductionRate = Scalar{
-	Desc:         "GIS reduction per dollar of other income",
-	Basis:        BasisFixed,
-	Source:       "ESDC",
-	LastVerified: "2026-09",
-	Rows:         map[int]float64{2026: 0.50},
-}
-
 type GISYear struct {
 	SingleMaxMonthly         float64
 	SingleCutoff             float64
 	SpouseOfPensionerMonthly float64
+	SpouseOfPensionerCutoff  float64
+	// SingleReduction is the single recipient's reduction schedule, and
+	// SpouseReduction the spouse-of-pensioner schedule applied per spouse to
+	// the couple's combined income (half the single rates). Each band's rate
+	// is a marginal reduction on annual income excluding OAS and GIS; the
+	// band boundaries index with CPI, the rates are fixed in law.
+	SingleReduction []Bracket
+	SpouseReduction []Bracket
+	// EmploymentExemptFull is the employment income fully excluded from the
+	// test, EmploymentExemptHalf the next slice of which
+	// EmploymentExemptHalfRate is excluded as well. Each spouse claims the
+	// exemption on their own employment income; the amounts are fixed in law.
+	EmploymentExemptFull     float64
+	EmploymentExemptHalf     float64
+	EmploymentExemptHalfRate float64
 }
 
 var GIS = Table[GISYear]{
-	Desc:         "GIS amounts and income cut-off",
+	Desc:         "GIS amounts, reduction schedule, and income cut-offs",
 	Basis:        BasisCPI,
-	Source:       "ESDC 2026 rate card Jan-Mar",
+	Source:       "ESDC 2026 rate card Jan-Mar (Tables 1 and 2)",
 	LastVerified: "2026-09",
 	Rows: map[int]GISYear{2026: {
 		SingleMaxMonthly:         1108.74,
 		SingleCutoff:             22488,
 		SpouseOfPensionerMonthly: 667.41,
+		SpouseOfPensionerCutoff:  29712,
+		SingleReduction: []Bracket{
+			{Lower: 0, Upper: 2040, Rate: 0.50, Basis: BasisCPI},
+			{Lower: 2040, Upper: 10272, Rate: 0.75, Basis: BasisCPI},
+			{Lower: 10272, Upper: math.Inf(1), Rate: 0.50, Basis: BasisCPI},
+		},
+		SpouseReduction: []Bracket{
+			{Lower: 0, Upper: 4080, Rate: 0.25, Basis: BasisCPI},
+			{Lower: 4080, Upper: 8736, Rate: 0.375, Basis: BasisCPI},
+			{Lower: 8736, Upper: math.Inf(1), Rate: 0.25, Basis: BasisCPI},
+		},
+		EmploymentExemptFull:     5000,
+		EmploymentExemptHalf:     10000,
+		EmploymentExemptHalfRate: 0.50,
 	}},
 }
 

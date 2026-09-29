@@ -1,6 +1,7 @@
 package projection
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -790,6 +791,34 @@ assumptions: {portfolio_return: 0.05, inflation: 0.021}
 	}
 	if results[2031-2026].GIS <= 0 {
 		t.Fatalf("2031 GIS = %v, want positive once OAS is received on a low income", results[2031-2026].GIS)
+	}
+}
+
+// TestRun_GISCoupleUsesCombinedIncome covers the Done-when item that a
+// couple's GIS uses the combined household income test: two pensioners each
+// below the single cut-off are paid on the single test, but the couple's
+// combined income decides the spouse-of-pensioner claim.
+func TestRun_GISCoupleUsesCombinedIncome(t *testing.T) {
+	config := func(cppMonthly float64) string {
+		return fmt.Sprintf(`base_year: 2026
+spouses:
+  - {name: Alex, birth_year: 1956, retirement_age: 40, cpp: {monthly_at_65: %v, start_age: 65}}
+  - {name: Sam, birth_year: 1956, retirement_age: 40, cpp: {monthly_at_65: %v, start_age: 65}}
+spending: {target_today_dollars: 10000, mode: flat}
+assumptions: {portfolio_return: 0.05, inflation: 0.021}
+`, cppMonthly, cppMonthly)
+	}
+
+	// $13,200 each is $26,400 combined, under the couple's cut-off.
+	first := mustRun(t, config(1100), 2026)[0]
+	if first.GIS <= 0 {
+		t.Fatalf("GIS at $26,400 combined = %v, want positive", first.GIS)
+	}
+
+	// $15,000 each would qualify individually, but $30,000 combined is over
+	// the couple's cut-off, so the household receives nothing.
+	if got := mustRun(t, config(1250), 2026)[0].GIS; got != 0 {
+		t.Fatalf("GIS at $30,000 combined = %v, want 0", got)
 	}
 }
 
