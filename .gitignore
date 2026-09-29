@@ -84,3 +84,5 @@ docs/api/
 __pycache__/
 *.pyc
 .opencode/worktrees/
+.opencode/plugins/worktree.ts
+.opencode/worktree/
